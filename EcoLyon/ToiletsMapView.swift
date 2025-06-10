@@ -277,7 +277,7 @@ struct SmartSearchBarView: View {
                 .focused($isSearchFocused)
                 .textInputAutocapitalization(.words) // Activer les majuscules
                 .autocorrectionDisabled(false) // Permettre l'autocorrection
-                .onChange(of: searchText) { _, newValue in
+                .onChange(of: searchText) { newValue in
                     onSearchTextChanged(newValue)
                 }
                 .onSubmit {
@@ -298,7 +298,7 @@ struct SmartSearchBarView: View {
         .background(Color(.systemBackground))
         .cornerRadius(12)
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-        .onChange(of: isSearchFocused) { _, focused in
+        .onChange(of: isSearchFocused) { focused in
             if !focused {
                 // Petit délai pour permettre le tap sur les suggestions
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -702,9 +702,6 @@ enum ToiletAPIError: Error, LocalizedError {
         }
     }
 }
-
-// Ajoutez ce composant à la fin de votre ToiletsMapView.swift
-
 struct UserLocationMarker: View {
     var body: some View {
         ZStack {
