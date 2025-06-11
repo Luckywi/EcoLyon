@@ -2,6 +2,9 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
+// MARK: - Import des vues de détail
+// Assurez-vous d'avoir créé le fichier PM25DetailView.swift
+
 // MARK: - Modèles de données
 struct AirQualityResponse: Codable {
     let data: [AirQualityData]
@@ -48,7 +51,7 @@ struct Lyon {
     ]
 }
 
-// MARK: - Service API corrigé
+// MARK: - Service API optimisé
 class AirQualityAPIService {
     private let apiToken = "0c7d0bee25f494150fa591275260e81f"
     private let baseURL = "https://api.atmo-aura.fr/api/v1/communes"
@@ -84,7 +87,7 @@ class AirQualityAPIService {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.timeoutInterval = 10.0 // ✅ Timeout réduit de 30s à 10s
+        request.timeoutInterval = 10.0
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -110,7 +113,7 @@ enum APIError: Error {
     case noData
 }
 
-// MARK: - ✅ COMPOSANT PRINCIPAL RAPIDE (remplace AirQualityMapView)
+// MARK: - ✅ COMPOSANT PRINCIPAL OPTIMISÉ
 struct AirQualityMapView: View {
     @StateObject private var locationService = GlobalLocationService.shared
     @State private var airData: AirQualityData?
@@ -126,10 +129,10 @@ struct AirQualityMapView: View {
     var body: some View {
         ZStack {
             if let district = locationService.detectedDistrict {
-                // ✅ Interface principale IMMÉDIATE (données déjà disponibles)
+                // ✅ Interface principale IMMÉDIATE
                 mainContentView(district: district)
             } else {
-                // ✅ Chargement minimal (ne devrait plus arriver grâce au GlobalLocationService)
+                // ✅ Chargement minimal (rare grâce au GlobalLocationService optimisé)
                 quickLoadingView
             }
         }
@@ -137,11 +140,18 @@ struct AirQualityMapView: View {
         .cornerRadius(20)
         .shadow(color: .black.opacity(0.3), radius: 15, x: 0, y: 8)
         .onAppear {
+            // ✅ Redémarrer la localisation si nécessaire
+            locationService.refreshLocation()
+            
             // ✅ Chargement immédiat des données air si district disponible
             if let district = locationService.detectedDistrict {
                 loadAirQualityData(for: district)
                 updateMapRegion(for: district.coordinate)
             }
+        }
+        .onDisappear {
+            // ✅ Arrêter les mises à jour quand la vue n'est plus visible
+            locationService.stopLocationUpdates()
         }
         .onChange(of: locationService.detectedDistrict) { district in
             if let district = district {
@@ -179,6 +189,7 @@ struct AirQualityMapView: View {
                     airData: airData,
                     isLoading: isLoadingAirData,
                     errorMessage: errorMessage,
+                    selectedDistrict: district,
                     onRetry: {
                         if let district = locationService.detectedDistrict {
                             loadAirQualityData(for: district)
@@ -231,7 +242,7 @@ struct AirQualityMapView: View {
         }
     }
     
-    // MARK: - Fonctions
+    // MARK: - Fonctions optimisées
     
     private func loadAirQualityData(for district: District) {
         let apiService = AirQualityAPIService()
@@ -332,6 +343,7 @@ struct AirQualityDataView: View {
     let airData: AirQualityData?
     let isLoading: Bool
     let errorMessage: String?
+    let selectedDistrict: District
     let onRetry: () -> Void
     
     var body: some View {
@@ -341,7 +353,7 @@ struct AirQualityDataView: View {
             } else if let error = errorMessage {
                 EmptyStateView(message: error, onRetry: onRetry)
             } else if let data = airData {
-                AirQualityCompactView(airData: data)
+                AirQualityCompactView(airData: data, selectedDistrict: selectedDistrict)
             } else {
                 EmptyStateView(message: "Aucune donnée", onRetry: onRetry)
             }
@@ -349,9 +361,10 @@ struct AirQualityDataView: View {
     }
 }
 
-// MARK: - Vue compacte des données
+// MARK: - Vue compacte des données (MODIFIÉE)
 struct AirQualityCompactView: View {
     let airData: AirQualityData
+    let selectedDistrict: District
     
     var body: some View {
         VStack(spacing: 14) {
@@ -391,9 +404,10 @@ struct AirQualityCompactView: View {
                 }
             }
             
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
-                ForEach(airData.sous_indices.prefix(4), id: \.polluant_nom) { pollutant in
-                    CompactPollutantView(pollutant: pollutant)
+            // ✅ CHANGEMENT ICI : Passer selectedDistrict
+            LazyVGrid(columns: createAdaptiveColumns(for: airData.sous_indices.count), spacing: 6) {
+                ForEach(airData.sous_indices, id: \.polluant_nom) { pollutant in
+                    CompactPollutantView(pollutant: pollutant, selectedDistrict: selectedDistrict)
                 }
             }
         }
@@ -408,6 +422,17 @@ struct AirQualityCompactView: View {
         )
     }
     
+    // ✅ NOUVELLE FONCTION : Créer une grille adaptative
+    private func createAdaptiveColumns(for count: Int) -> [GridItem] {
+        if count <= 4 {
+            // Pour 4 polluants ou moins : 4 colonnes
+            return Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
+        } else {
+            // Pour 5 polluants : 5 colonnes avec espacement réduit
+            return Array(repeating: GridItem(.flexible(), spacing: 5), count: 5)
+        }
+    }
+    
     private func formatDate(_ dateString: String) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
@@ -420,19 +445,51 @@ struct AirQualityCompactView: View {
     }
 }
 
-// MARK: - Vue compacte des polluants
+// MARK: - Vue compacte des polluants (MODIFIÉE POUR NAVIGATION)
 struct CompactPollutantView: View {
     let pollutant: Pollutant
+    let selectedDistrict: District
+    @State private var showingDetail = false
     
     var body: some View {
-        Circle()
-            .fill(getColor(from: pollutant.indice))
-            .frame(width: 40, height: 40)
-            .overlay(
-                Text(getShortName(pollutant.polluant_nom))
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.white)
-            )
+        Button(action: {
+            showingDetail = true
+        }) {
+            Circle()
+                .fill(getColor(from: pollutant.indice))
+                .frame(width: 46, height: 46)
+                .overlay(
+                    Text(getShortName(pollutant.polluant_nom))
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundColor(.white)
+                )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .scaleEffect(showingDetail ? 0.95 : 1.0)
+        .animation(.easeInOut(duration: 0.1), value: showingDetail)
+        .sheet(isPresented: $showingDetail) {
+            getPollutantDetailView()
+        }
+    }
+    
+    // ✅ ROUTER VERS LES VUES SPÉCIFIQUES
+    @ViewBuilder
+    private func getPollutantDetailView() -> some View {
+        switch pollutant.polluant_nom.uppercased() {
+        case "PM2.5":
+            PM25DetailView(pollutant: pollutant, selectedDistrict: selectedDistrict)
+        case "PM10":
+            PM10DetailView(pollutant: pollutant, selectedDistrict: selectedDistrict)
+        case "NO2":
+            NO2DetailView(pollutant: pollutant, selectedDistrict: selectedDistrict)
+        case "O3":
+            O3DetailView(pollutant: pollutant, selectedDistrict: selectedDistrict)
+        case "SO2":
+            SO2DetailView(pollutant: pollutant, selectedDistrict: selectedDistrict)
+        default:
+            Text("Détails non disponibles pour \(pollutant.polluant_nom)")
+                .padding()
+        }
     }
     
     private func getShortName(_ name: String) -> String {
@@ -440,7 +497,7 @@ struct CompactPollutantView: View {
         case "NO2": return "NO2"
         case "O3": return "O3"
         case "PM10": return "PM10"
-        case "PM2.5": return "PM25"
+        case "PM2.5": return "PM2.5"  // ✅ Gardé avec le point
         case "SO2": return "SO2"
         default: return String(name.prefix(3))
         }

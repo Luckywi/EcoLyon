@@ -1,7 +1,7 @@
 import SwiftUI
 import CoreLocation
 
-// MARK: - Service LocationService GLOBAL (nouveau)
+// MARK: - Service LocationService GLOBAL OPTIMISÉ
 @MainActor
 class GlobalLocationService: NSObject, ObservableObject {
     static let shared = GlobalLocationService()
@@ -14,48 +14,93 @@ class GlobalLocationService: NSObject, ObservableObject {
     
     private let locationManager = CLLocationManager()
     private var hasStartedLocation = false
+    private var isUpdatingLocation = false
+    private var fallbackTimer: Timer?
+    private var positionCount = 0 // Compteur pour arrêter après quelques positions précises
     
     override init() {
         super.init()
         setupLocationManager()
-        // ✅ DÉMARRER IMMÉDIATEMENT au lancement de l'app
+        // ✅ DÉMARRER IMMÉDIATEMENT avec position connue + continuous updates
         startLocationDetection()
     }
     
     private func setupLocationManager() {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager.distanceFilter = 50 // Mise à jour tous les 50m minimum
         authorizationStatus = locationManager.authorizationStatus
     }
     
-    // ✅ Démarre la localisation immédiatement sans attendre
+    // ✅ NOUVELLE STRATÉGIE : Position connue + continuous updates
     func startLocationDetection() {
         guard !hasStartedLocation else { return }
         hasStartedLocation = true
         
-        print("🚀 Démarrage localisation globale immédiate")
+        print("🚀 Démarrage localisation globale optimisée")
         
+        // ✅ ÉTAPE 1 : Utiliser IMMÉDIATEMENT la position connue si disponible
+        if let lastKnownLocation = locationManager.location {
+            print("📍 Position connue trouvée : \(lastKnownLocation.coordinate)")
+            processLocation(lastKnownLocation.coordinate, isKnownLocation: true)
+        }
+        
+        // ✅ ÉTAPE 2 : Lancer les mises à jour continues selon les permissions
         switch authorizationStatus {
         case .authorizedWhenInUse, .authorizedAlways:
-            requestLocationNow()
+            startContinuousLocationUpdates()
         case .notDetermined:
             locationManager.requestWhenInUseAuthorization()
         case .denied, .restricted:
-            setFallbackDistrict()
+            // Position connue déjà traitée ci-dessus, sinon fallback
+            if userLocation == nil {
+                scheduleFallback()
+            }
         @unknown default:
-            setFallbackDistrict()
+            if userLocation == nil {
+                scheduleFallback()
+            }
         }
     }
     
-    private func requestLocationNow() {
-        print("📍 Demande de position immédiate")
-        locationManager.requestLocation()
+    // ✅ NOUVELLE MÉTHODE : Mises à jour continues
+    private func startContinuousLocationUpdates() {
+        guard !isUpdatingLocation else { return }
+        guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
+            return
+        }
         
-        // Timeout de sécurité : 3 secondes max
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            if !self.isLocationReady {
-                print("⏰ Timeout localisation après 3s")
-                self.setFallbackDistrict()
+        print("🔄 Démarrage mises à jour continues")
+        isUpdatingLocation = true
+        positionCount = 0
+        locationManager.startUpdatingLocation()
+        
+        // ✅ Fallback seulement si pas de position après 5 secondes
+        if userLocation == nil {
+            scheduleFallback()
+        }
+    }
+    
+    // ✅ NOUVELLE MÉTHODE : Arrêter les mises à jour
+    func stopLocationUpdates() {
+        guard isUpdatingLocation else { return }
+        
+        print("⏸️ Arrêt mises à jour location")
+        isUpdatingLocation = false
+        locationManager.stopUpdatingLocation()
+        fallbackTimer?.invalidate()
+        fallbackTimer = nil
+    }
+    
+    // ✅ Fallback différé et conditionnel
+    private func scheduleFallback() {
+        fallbackTimer?.invalidate()
+        fallbackTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+            Task { @MainActor in
+                if self.userLocation == nil && !self.isLocationReady {
+                    print("⏰ Fallback après 5s - aucune position disponible")
+                    self.setFallbackDistrict()
+                }
             }
         }
     }
@@ -68,7 +113,36 @@ class GlobalLocationService: NSObject, ObservableObject {
         print("🏠 Fallback: \(fallback.name)")
     }
     
-    // ✅ Calcul immédiat de l'arrondissement (< 5ms)
+    // ✅ NOUVELLE MÉTHODE : Traitement centralisé des positions
+    private func processLocation(_ coordinate: CLLocationCoordinate2D, isKnownLocation: Bool = false) {
+        userLocation = coordinate
+        
+        // Calcul immédiat de l'arrondissement
+        let nearestDistrict = calculateNearestDistrict(from: coordinate)
+        detectedDistrict = nearestDistrict
+        isLocationReady = true
+        locationError = nil
+        
+        // Annuler le fallback si en cours
+        fallbackTimer?.invalidate()
+        fallbackTimer = nil
+        
+        let locationSource = isKnownLocation ? "(position connue)" : "(nouvelle position)"
+        print("✅ Position traitée \(locationSource): \(nearestDistrict.name) (\(coordinate.latitude), \(coordinate.longitude))")
+        
+        // ✅ Arrêter les mises à jour après 3 positions précises nouvelles
+        if !isKnownLocation && isUpdatingLocation {
+            positionCount += 1
+            if positionCount >= 3 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    self.stopLocationUpdates()
+                    print("🎯 3 positions reçues, arrêt des mises à jour")
+                }
+            }
+        }
+    }
+    
+    // ✅ Calcul optimisé de l'arrondissement
     private func calculateNearestDistrict(from location: CLLocationCoordinate2D) -> District {
         let userCLLocation = CLLocation(latitude: location.latitude, longitude: location.longitude)
         
@@ -85,27 +159,52 @@ class GlobalLocationService: NSObject, ObservableObject {
     func setDistrict(_ district: District) {
         detectedDistrict = district
     }
+    
+    // ✅ NOUVELLE MÉTHODE : Redémarrer la localisation si nécessaire
+    func refreshLocation() {
+        guard authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways else {
+            print("🚫 Pas d'autorisation pour refresh location")
+            return
+        }
+        
+        if !isUpdatingLocation {
+            print("🔄 Refresh location demandé")
+            startContinuousLocationUpdates()
+        }
+    }
+    
+    // ✅ NOUVELLE MÉTHODE : Forcer une nouvelle localisation
+    func forceLocationUpdate() {
+        if isUpdatingLocation {
+            stopLocationUpdates()
+        }
+        
+        // Petite pause puis redémarrage
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.refreshLocation()
+        }
+    }
 }
 
-// MARK: - CLLocationManagerDelegate
+// MARK: - CLLocationManagerDelegate OPTIMISÉ
 extension GlobalLocationService: CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
         
-        let coordinate = location.coordinate
-        userLocation = coordinate
-        
-        // ✅ Calcul immédiat de l'arrondissement
-        let nearestDistrict = calculateNearestDistrict(from: coordinate)
-        detectedDistrict = nearestDistrict
-        isLocationReady = true
-        
-        print("✅ Position détectée: \(nearestDistrict.name) (\(coordinate.latitude), \(coordinate.longitude))")
+        // ✅ Utiliser la méthode centralisée de traitement
+        processLocation(location.coordinate, isKnownLocation: false)
     }
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         print("❌ Erreur localisation: \(error)")
-        setFallbackDistrict()
+        
+        // ✅ Ne pas fallback immédiatement, garder la position connue si elle existe
+        if userLocation == nil {
+            setFallbackDistrict()
+        }
+        
+        // Arrêter les mises à jour en cas d'erreur
+        stopLocationUpdates()
     }
     
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -113,13 +212,24 @@ extension GlobalLocationService: CLLocationManagerDelegate {
         
         switch authorizationStatus {
         case .authorizedWhenInUse, .authorizedAlways:
-            requestLocationNow()
+            // ✅ Vérifier position connue puis démarrer les mises à jour
+            if let lastKnownLocation = locationManager.location, userLocation == nil {
+                print("📍 Autorisation accordée - position connue disponible")
+                processLocation(lastKnownLocation.coordinate, isKnownLocation: true)
+            }
+            startContinuousLocationUpdates()
         case .denied, .restricted:
-            setFallbackDistrict()
+            stopLocationUpdates()
+            if userLocation == nil {
+                setFallbackDistrict()
+            }
         case .notDetermined:
             break
         @unknown default:
-            setFallbackDistrict()
+            stopLocationUpdates()
+            if userLocation == nil {
+                setFallbackDistrict()
+            }
         }
     }
 }
@@ -149,9 +259,9 @@ struct EcoLyonApp: App {
     let persistenceController = PersistenceController.shared
     
     init() {
-        // ✅ DÉMARRER LA LOCALISATION DÈS LE LANCEMENT
+        // ✅ DÉMARRER LA LOCALISATION DÈS LE LANCEMENT AVEC STRATÉGIE OPTIMISÉE
         _ = GlobalLocationService.shared
-        print("🚀 App lancée - Localisation démarrée immédiatement")
+        print("🚀 App lancée - Localisation optimisée démarrée immédiatement")
     }
 
     var body: some Scene {
