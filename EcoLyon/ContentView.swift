@@ -21,76 +21,16 @@ struct ContentView: View {
                             }
                         }
                     
-                    // NOUVEAU : Composant Recommandations
+                    // Composant Recommandations
                     AirQualityRecommendationsView(fallbackAQI: currentAQI)
                         .padding(.bottom, 30)
                     
-                    // Section autres fonctionnalités
-                    VStack(spacing: 20) {
-                        // Divider avec texte
-                        HStack {
-                            Rectangle()
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(height: 1)
-                            
-                            Text("Autres services")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal, 12)
-                            
-                            Rectangle()
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(height: 1)
-                        }
-                        .padding(.horizontal, 40)
-                        .padding(.bottom, 10)
-                        
-                        // Bouton toilettes stylisé
-                        Button(action: {
-                            showToiletsMap = true
-                        }) {
-                            HStack(spacing: 15) {
-                                Image(systemName: "toilet.fill")
-                                    .font(.system(size: 24))
-                                    .foregroundColor(.white)
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Toilettes Publiques")
-                                        .font(.headline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.white)
-                                    
-                                    Text("Trouvez les toilettes les plus proches")
-                                        .font(.caption)
-                                        .foregroundColor(.white.opacity(0.8))
-                                }
-                                
-                                Spacer()
-                                
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 16)
-                            .background(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [.blue, .blue.opacity(0.8)]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .cornerRadius(16)
-                            .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
-                        }
-                        .padding(.horizontal, 20)
-                        
-                        // Autres boutons peuvent être ajoutés ici
-                        // ExampleServiceButton()
-                        
-                        // Espacement en bas pour le menu
-                        Spacer(minLength: 120) // Plus d'espace pour le menu bottom
-                    }
+                    // NOUVEAU : Composant Services Environnementaux
+                    EnvironmentCardView()
+                        .padding(.bottom, 30)
+                    
+                    // Espacement en bas pour le menu
+                    Spacer(minLength: 120)
                 }
             }
             .background(Color(red: 248/255, green: 247/255, blue: 244/255))
@@ -98,7 +38,7 @@ struct ContentView: View {
                 ToiletsMapView()
             }
             
-            // NOUVEAU : Menu Bottom fixe
+            // Menu Bottom fixe
             FixedBottomMenuView(
                 isMenuExpanded: $isMenuExpanded,
                 showToiletsMap: $showToiletsMap,

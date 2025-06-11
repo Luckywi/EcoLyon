@@ -1,0 +1,23 @@
+{
+  "images" : [
+    {
+      "filename" : "20250611_1631_Icône Silo Verre Futuriste_simple_compose_01jxfpcc0het599kejsv5e8x01.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "20250611_1631_Icône Silo Verre Futuriste_simple_compose_01jxfpcc0het599kejsv5e8x01 1.png",
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "filename" : "20250611_1631_Icône Silo Verre Futuriste_simple_compose_01jxfpcc0het599kejsv5e8x01 2.png",
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
