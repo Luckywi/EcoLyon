@@ -153,14 +153,15 @@ class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
 }
 
-// MARK: - Vue principale avec carte RÉUTILISABLE
+// MARK: - Vue principale avec carte OPTIMISÉE
 struct AirQualityMapView: View {
     @StateObject private var locationManager = LocationManager()
-    @State private var selectedDistrict = Lyon.districts[0]
+    @State private var selectedDistrict: District? = nil // ✅ Pas d'initialisation par défaut !
     @State private var airData: AirQualityData?
     @State private var isLoading = false
     @State private var showLocationSelector = false
     @State private var errorMessage: String?
+    @State private var isInitializing = true // ✅ État d'initialisation
     
     @State private var region = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 45.764043, longitude: 4.835659),
@@ -168,7 +169,84 @@ struct AirQualityMapView: View {
     )
     
     var body: some View {
-        // Container principal avec hauteur fixe
+        ZStack {
+            if isInitializing || selectedDistrict == nil {
+                // ✅ Vue de chargement pendant l'initialisation
+                initializationView
+            } else {
+                // ✅ Interface principale une fois initialisé
+                mainContentView
+            }
+        }
+        .frame(height: 480)
+        .cornerRadius(20)
+        .shadow(color: .black.opacity(0.3), radius: 15, x: 0, y: 8)
+        .onAppear {
+            initializeLocation()
+        }
+        .onChange(of: locationManager.userLocation) { location in
+            if let location = location {
+                handleLocationUpdate(location)
+            }
+        }
+        .onChange(of: selectedDistrict) { _ in
+            if !isInitializing {
+                loadAirQuality()
+            }
+        }
+    }
+    
+    // MARK: - Vue d'initialisation
+    private var initializationView: some View {
+        ZStack {
+            // Carte en arrière-plan
+            Map(coordinateRegion: $region, showsUserLocation: true, userTrackingMode: .constant(.none))
+                .cornerRadius(20)
+                .opacity(0.4)
+            
+            // Overlay de chargement
+            VStack(spacing: 20) {
+                // Animation de localisation
+                ZStack {
+                    Circle()
+                        .stroke(Color.blue.opacity(0.3), lineWidth: 3)
+                        .frame(width: 60, height: 60)
+                    
+                    Circle()
+                        .stroke(Color.blue, lineWidth: 3)
+                        .frame(width: 60, height: 60)
+                        .rotationEffect(.degrees(isInitializing ? 360 : 0))
+                        .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: isInitializing)
+                    
+                    Image(systemName: "location.fill")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 24, weight: .bold))
+                }
+                
+                VStack(spacing: 8) {
+                    Text("Localisation en cours...")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    Text("Détection de votre arrondissement")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+            }
+            .padding(30)
+            .background(
+                RoundedRectangle(cornerRadius: 20)
+                    .fill(.black.opacity(0.85))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(.white.opacity(0.3), lineWidth: 1)
+                    )
+            )
+        }
+    }
+    
+    // MARK: - Vue principale
+    private var mainContentView: some View {
         ZStack {
             // Carte Apple Maps en arrière-plan
             Map(coordinateRegion: $region, showsUserLocation: true, userTrackingMode: .constant(.none))
@@ -177,11 +255,16 @@ struct AirQualityMapView: View {
             // Overlay avec tous les composants
             VStack(spacing: 12) {
                 // Sélecteur d'arrondissement en haut
-                DistrictSelectorView(
-                    selectedDistrict: $selectedDistrict,
-                    showLocationSelector: $showLocationSelector,
-                    userLocation: locationManager.userLocation
-                )
+                if let district = selectedDistrict {
+                    DistrictSelectorView(
+                        selectedDistrict: Binding(
+                            get: { district },
+                            set: { selectedDistrict = $0 }
+                        ),
+                        showLocationSelector: $showLocationSelector,
+                        userLocation: locationManager.userLocation
+                    )
+                }
                 
                 Spacer()
                 
@@ -196,33 +279,107 @@ struct AirQualityMapView: View {
             .padding(16)
             
             // Menu de sélection par-dessus tout
-            if showLocationSelector {
+            if showLocationSelector, let district = selectedDistrict {
                 LocationSelectorMenuView(
-                    selectedDistrict: $selectedDistrict,
+                    selectedDistrict: Binding(
+                        get: { district },
+                        set: { selectedDistrict = $0 }
+                    ),
                     isPresented: $showLocationSelector,
                     onSelection: { loadAirQuality() }
                 )
             }
         }
-        .frame(height: 480) // Hauteur fixe équivalente à ~60% d'un écran iPhone standard
-        .cornerRadius(20)
-        .shadow(color: .black.opacity(0.3), radius: 15, x: 0, y: 8)
-        .onAppear {
-            locationManager.requestLocation()
-            loadAirQuality()
-        }
-        .onChange(of: locationManager.userLocation) { location in
-            if let location = location {
-                updateSelectedDistrict(for: location)
-                updateMapRegion(for: location)
+        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+    }
+    
+    // MARK: - Fonctions optimisées
+    
+    private func initializeLocation() {
+        print("🔄 Démarrage de la localisation...")
+        locationManager.requestLocation()
+        
+        // ✅ Timeout de sécurité : si pas de localisation après 5 secondes, utiliser un défaut
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            if selectedDistrict == nil {
+                print("⏰ Timeout - Utilisation de Lyon 1er par défaut")
+                useDefaultLocation()
             }
-        }
-        .onChange(of: selectedDistrict) { _ in
-            loadAirQuality()
         }
     }
     
+    private func handleLocationUpdate(_ location: CLLocation) {
+        print("📍 Localisation reçue: \(location.coordinate.latitude), \(location.coordinate.longitude)")
+        
+        // ✅ Trouver l'arrondissement le plus proche IMMÉDIATEMENT
+        let nearestDistrict = findNearestDistrict(for: location)
+        
+        if isInitializing {
+            // ✅ Première localisation : tout configurer d'un coup
+            withAnimation(.easeInOut(duration: 0.6)) {
+                selectedDistrict = nearestDistrict
+                updateMapRegion(for: location)
+                isInitializing = false
+            }
+            
+            // ✅ Charger les données immédiatement après
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                loadAirQuality()
+            }
+            
+            print("✅ Arrondissement détecté: \(nearestDistrict.name)")
+        } else {
+            // ✅ Mise à jour ultérieure : seulement si l'arrondissement change
+            if selectedDistrict?.id != nearestDistrict.id {
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    selectedDistrict = nearestDistrict
+                    updateMapRegion(for: location)
+                }
+                print("🔄 Changement d'arrondissement vers: \(nearestDistrict.name)")
+            }
+        }
+    }
+    
+    private func findNearestDistrict(for location: CLLocation) -> District {
+        let nearest = Lyon.districts.min { district1, district2 in
+            let location1 = CLLocation(
+                latitude: district1.coordinate.latitude,
+                longitude: district1.coordinate.longitude
+            )
+            let location2 = CLLocation(
+                latitude: district2.coordinate.latitude,
+                longitude: district2.coordinate.longitude
+            )
+            return location.distance(from: location1) < location.distance(from: location2)
+        }
+        
+        return nearest ?? Lyon.districts[0] // Fallback sur Lyon 1er
+    }
+    
+    private func useDefaultLocation() {
+        // ✅ Utiliser Lyon 1er par défaut si pas de localisation
+        let defaultDistrict = Lyon.districts[0] // Lyon 1er
+        let defaultLocation = CLLocation(
+            latitude: defaultDistrict.coordinate.latitude,
+            longitude: defaultDistrict.coordinate.longitude
+        )
+        
+        withAnimation(.easeInOut(duration: 0.6)) {
+            selectedDistrict = defaultDistrict
+            updateMapRegion(for: defaultLocation)
+            isInitializing = false
+        }
+        
+        loadAirQuality()
+        print("🏠 Utilisation de Lyon 1er par défaut")
+    }
+    
     private func loadAirQuality() {
+        guard let district = selectedDistrict else {
+            print("⚠️ Pas d'arrondissement pour charger les données")
+            return
+        }
+        
         let apiService = AirQualityAPIService()
         
         Task {
@@ -232,43 +389,29 @@ struct AirQualityMapView: View {
             }
             
             do {
-                let data = try await apiService.fetchAirQuality(for: selectedDistrict.codeInsee)
+                let data = try await apiService.fetchAirQuality(for: district.codeInsee)
                 await MainActor.run {
                     self.airData = data
                     self.isLoading = false
                 }
+                print("✅ Données chargées pour \(district.name)")
             } catch {
                 await MainActor.run {
                     self.errorMessage = "Données indisponibles"
                     self.isLoading = false
                 }
+                print("❌ Erreur données: \(error)")
             }
         }
     }
     
-    private func updateSelectedDistrict(for location: CLLocation) {
-        let nearestDistrict = Lyon.districts.min { district1, district2 in
-            let location1 = CLLocation(latitude: district1.coordinate.latitude, longitude: district1.coordinate.longitude)
-            let location2 = CLLocation(latitude: district2.coordinate.latitude, longitude: district2.coordinate.longitude)
-            return location.distance(from: location1) < location.distance(from: location2)
-        }
-        
-        if let nearest = nearestDistrict,
-           location.distance(from: CLLocation(latitude: nearest.coordinate.latitude, longitude: nearest.coordinate.longitude)) < 5000 {
-            selectedDistrict = nearest
-        }
-    }
-    
     private func updateMapRegion(for location: CLLocation) {
-        withAnimation(.easeInOut(duration: 1)) {
-            region = MKCoordinateRegion(
-                center: location.coordinate,
-                span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
-            )
-        }
+        region = MKCoordinateRegion(
+            center: location.coordinate,
+            span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+        )
     }
 }
-
 // MARK: - Composant Sélecteur REDESIGNÉ
 struct DistrictSelectorView: View {
     @Binding var selectedDistrict: District

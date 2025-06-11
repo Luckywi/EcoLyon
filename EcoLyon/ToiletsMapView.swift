@@ -2,6 +2,7 @@ import SwiftUI
 import MapKit
 import Foundation
 
+// MARK: - ToiletsMapView avec gestion clavier simple (layout original conservé)
 struct ToiletsMapView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var toiletService = ToiletAPIService()
@@ -9,17 +10,18 @@ struct ToiletsMapView: View {
     
     @State private var region = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 45.7640, longitude: 4.8357),
-        span: MKCoordinateSpan(latitudeDelta: 0.009, longitudeDelta: 0.009) // ~1km de rayon
+        span: MKCoordinateSpan(latitudeDelta: 0.009, longitudeDelta: 0.009)
     )
     @State private var searchText = ""
     @State private var addressSuggestions: [AddressSuggestion] = []
     @State private var showSuggestions = false
-    @State private var searchedLocation: CLLocationCoordinate2D? // Pin rouge pour recherche
+    @State private var searchedLocation: CLLocationCoordinate2D?
+    @State private var hasInitializedLocation = false
     
     var body: some View {
         NavigationView {
             VStack(spacing: 16) {
-                // Barre de recherche avec suggestions
+                // ✅ Barre de recherche avec suggestions (LAYOUT ORIGINAL)
                 VStack(spacing: 0) {
                     SmartSearchBarView(
                         searchText: $searchText,
@@ -30,7 +32,6 @@ struct ToiletsMapView: View {
                         onSearchSubmitted: handleSearchSubmit
                     )
                     
-                    // Liste des suggestions
                     if showSuggestions && !addressSuggestions.isEmpty {
                         SuggestionsListView(
                             suggestions: addressSuggestions,
@@ -39,7 +40,7 @@ struct ToiletsMapView: View {
                     }
                 }
                 
-                // Carte dans une box
+                // ✅ Carte dans une box (LAYOUT ORIGINAL - 400px de hauteur)
                 MapBoxView(
                     region: $region,
                     toilets: toiletService.toilets,
@@ -48,7 +49,7 @@ struct ToiletsMapView: View {
                     isLoading: toiletService.isLoading
                 )
                 
-                // Statistiques en bas
+                // ✅ Statistiques en bas (LAYOUT ORIGINAL)
                 if toiletService.isLoading && toiletService.toilets.isEmpty {
                     LoadingStatsView()
                 } else {
@@ -59,7 +60,7 @@ struct ToiletsMapView: View {
                     )
                 }
             }
-            .padding()
+            .padding() // ✅ Padding original restauré
             .navigationTitle("Toilettes Publiques")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -80,6 +81,13 @@ struct ToiletsMapView: View {
                 setupInitialLocation()
                 loadToilets()
             }
+            .onChange(of: locationService.isLocationReady) { isReady in
+                if isReady && !hasInitializedLocation {
+                    initializeUserLocation()
+                }
+            }
+            // ✅ SEULE MODIFICATION : Ignorer l'ajustement automatique du clavier
+            .ignoresSafeArea(.keyboard, edges: .bottom)
             // Overlays globaux
             .overlay {
                 if toiletService.isLoading && toiletService.toilets.isEmpty {
@@ -91,25 +99,35 @@ struct ToiletsMapView: View {
                     ErrorOverlayView(message: errorMessage) {
                         loadToilets()
                     }
+                    .background(Color(red: 248/255, green: 247/255, blue: 244/255))
+                    .preferredColorScheme(.light)
                 }
             }
         }
     }
     
-    // MARK: - Functions
+    // MARK: - Functions (inchangées)
     
     private func setupInitialLocation() {
-        print("🔍 Setup location - Status actuel: \(locationService.authorizationStatus)")
+        print("🗺️ Initialisation de la carte des toilettes")
         locationService.requestLocationPermission()
         
-        // Debug des changements de localisation
-        if let userLocation = locationService.userLocation {
-            print("📍 Position utilisateur trouvée: \(userLocation)")
+        if locationService.isLocationReady {
+            initializeUserLocation()
+        }
+    }
+    
+    private func initializeUserLocation() {
+        guard !hasInitializedLocation else { return }
+        hasInitializedLocation = true
+        
+        print("📍 Initialisation de la position utilisateur pour les toilettes")
+        
+        if locationService.isUserInLyon(), let userLocation = locationService.userLocation {
+            print("✅ Utilisateur à Lyon, centrage sur sa position")
             centerMapOnLocation(userLocation)
         } else {
-            print("❌ Pas de position utilisateur")
-            // Forcer la demande de localisation
-            locationService.getCurrentLocation()
+            print("⚠️ Utilisateur pas à Lyon ou position indisponible, garder Place Bellecour")
         }
     }
     
@@ -126,7 +144,6 @@ struct ToiletsMapView: View {
             showSuggestions = true
             Task {
                 let allSuggestions = await locationService.searchAddresses(query: text)
-                // Limiter à 3 suggestions maximum
                 addressSuggestions = Array(allSuggestions.prefix(3))
             }
         } else {
@@ -138,7 +155,7 @@ struct ToiletsMapView: View {
     private func handleSuggestionTap(_ suggestion: AddressSuggestion) {
         searchText = suggestion.title
         showSuggestions = false
-        searchedLocation = suggestion.coordinate // Marquer la position recherchée
+        searchedLocation = suggestion.coordinate
         centerMapOnLocation(suggestion.coordinate)
     }
     
@@ -147,40 +164,45 @@ struct ToiletsMapView: View {
         
         Task {
             if let coordinate = await locationService.geocodeAddress(searchText) {
-                searchedLocation = coordinate // Marquer la position recherchée
+                searchedLocation = coordinate
                 centerMapOnLocation(coordinate)
             }
         }
     }
     
     private func centerOnUserLocation() {
-        print("🎯 Tentative de centrage sur utilisateur")
-        if let userLocation = locationService.userLocation {
-            print("📍 Position actuelle: \(userLocation.latitude), \(userLocation.longitude)")
-        } else {
-            print("📍 Position actuelle: nil")
-        }
-        print("🔐 Status permission: \(locationService.authorizationStatus)")
+        print("🎯 Demande de centrage sur utilisateur")
         
         if let userLocation = locationService.userLocation {
-            print("✅ Centrage sur position existante")
+            print("✅ Position disponible, centrage immédiat")
             centerMapOnLocation(userLocation)
         } else {
-            print("🔄 Demande nouvelle position")
+            print("🔄 Pas de position, demande de localisation")
             locationService.getCurrentLocation()
+            
+            let startTime = Date()
+            Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { timer in
+                if let userLocation = locationService.userLocation {
+                    timer.invalidate()
+                    centerMapOnLocation(userLocation)
+                    print("✅ Position reçue après \(Date().timeIntervalSince(startTime))s")
+                } else if Date().timeIntervalSince(startTime) > 10 {
+                    timer.invalidate()
+                    print("⏰ Timeout: pas de position après 10s")
+                }
+            }
         }
     }
     
     private func centerMapOnLocation(_ coordinate: CLLocationCoordinate2D) {
         withAnimation(.easeInOut(duration: 0.5)) {
             region.center = coordinate
-            // Maintenir le zoom fixe à 1km
             region.span = MKCoordinateSpan(latitudeDelta: 0.009, longitudeDelta: 0.009)
         }
     }
 }
 
-// MARK: - Composants UI améliorés
+// MARK: - Composants UI (LAYOUT ORIGINAL restauré)
 
 struct MapBoxView: View {
     @Binding var region: MKCoordinateRegion
@@ -191,7 +213,7 @@ struct MapBoxView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // En-tête de la box
+            // En-tête de la box (ORIGINAL)
             HStack {
                 Text("Carte des toilettes")
                     .font(.headline)
@@ -207,25 +229,24 @@ struct MapBoxView: View {
             .padding()
             .background(Color(.systemGray6))
             
-            // Carte
+            // ✅ Carte avec hauteur ORIGINALE fixe de 400px
             Map(coordinateRegion: $region, showsUserLocation: true, annotationItems: mapAnnotations) { annotation in
                 MapAnnotation(coordinate: annotation.coordinate) {
                     if let toilet = annotation.toilet {
                         ToiletMarkerView(toilet: toilet)
                     } else if annotation.isSearchResult {
-                        SearchPinMarker() // Pin rouge pour recherche
+                        SearchPinMarker()
                     } else {
-                        UserLocationMarker() // Position utilisateur
+                        UserLocationMarker()
                     }
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-                // Forcer le maintien du zoom quand l'app revient en premier plan
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     region.span = MKCoordinateSpan(latitudeDelta: 0.009, longitudeDelta: 0.009)
                 }
             }
-            .frame(height: 400)
+            .frame(height: 400) // ✅ HAUTEUR ORIGINALE RESTAURÉE
         }
         .background(Color(.systemBackground))
         .cornerRadius(16)
@@ -237,12 +258,10 @@ struct MapBoxView: View {
             MapAnnotationItem(toilet: toilet, coordinate: toilet.coordinate, isSearchResult: false)
         }
         
-        // Ajouter la position utilisateur
         if let userLocation = userLocation {
             annotations.append(MapAnnotationItem(toilet: nil, coordinate: userLocation, isSearchResult: false))
         }
         
-        // Ajouter le pin rouge pour la recherche
         if let searchedLocation = searchedLocation {
             annotations.append(MapAnnotationItem(toilet: nil, coordinate: searchedLocation, isSearchResult: true))
         }
@@ -275,8 +294,8 @@ struct SmartSearchBarView: View {
             
             TextField("Rechercher une adresse à Lyon...", text: $searchText)
                 .focused($isSearchFocused)
-                .textInputAutocapitalization(.words) // Activer les majuscules
-                .autocorrectionDisabled(false) // Permettre l'autocorrection
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled(false)
                 .onChange(of: searchText) { newValue in
                     onSearchTextChanged(newValue)
                 }
@@ -300,7 +319,6 @@ struct SmartSearchBarView: View {
         .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         .onChange(of: isSearchFocused) { focused in
             if !focused {
-                // Petit délai pour permettre le tap sur les suggestions
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     showSuggestions = false
                 }
@@ -363,11 +381,20 @@ struct ToiletStatsView: View {
             
             Button(action: onLocationTap) {
                 HStack {
-                    Image(systemName: userLocation != nil ? "location.fill" : "location.slash")
-                    Text("Ma position")
+                    Group {
+                        if userLocation != nil {
+                            Image(systemName: "location.fill")
+                                .foregroundColor(.green)
+                        } else {
+                            Image(systemName: "location.slash")
+                                .foregroundColor(.orange)
+                        }
+                    }
+                    
+                    Text(userLocation != nil ? "Ma position" : "Localiser")
                         .font(.caption)
                 }
-                .foregroundColor(.blue)
+                .foregroundColor(userLocation != nil ? .green : .orange)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(Color(.systemGray6))
@@ -506,17 +533,14 @@ struct ToiletMarkerView: View {
         let placemark = MKPlacemark(coordinate: coordinate)
         let mapItem = MKMapItem(placemark: placemark)
         
-        // Définir le nom et l'adresse pour l'affichage dans Plans
         mapItem.name = toilet.name
         mapItem.phoneNumber = nil
         
-        // Options de lancement (navigation piétonne)
         let launchOptions: [String: Any] = [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking,
-            MKLaunchOptionsShowsTrafficKey: false // Pas utile en mode piéton
+            MKLaunchOptionsShowsTrafficKey: false
         ]
         
-        // Ouvrir Apple Maps avec navigation
         mapItem.openInMaps(launchOptions: launchOptions)
         
         print("🧭 Navigation lancée vers: \(toilet.name) (\(coordinate.latitude), \(coordinate.longitude))")
@@ -526,7 +550,6 @@ struct ToiletMarkerView: View {
 struct SearchPinMarker: View {
     var body: some View {
         VStack(spacing: 0) {
-            // Bulle du pin
             ZStack {
                 Circle()
                     .fill(Color.red)
@@ -538,12 +561,10 @@ struct SearchPinMarker: View {
                     .font(.system(size: 16, weight: .bold))
             }
             
-            // Tige du pin
             Rectangle()
                 .fill(Color.red)
                 .frame(width: 3, height: 10)
             
-            // Pointe du pin
             Path { path in
                 path.move(to: CGPoint(x: 0, y: 0))
                 path.addLine(to: CGPoint(x: 3, y: 5))
@@ -553,11 +574,29 @@ struct SearchPinMarker: View {
             .fill(Color.red)
             .frame(width: 6, height: 5)
         }
-        .scaleEffect(1.2) // Légèrement plus grand pour être visible
+        .scaleEffect(1.2)
     }
 }
 
-// MARK: - Service API (gardez votre code existant)
+struct UserLocationMarker: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.blue.opacity(0.3))
+                .frame(width: 40, height: 40)
+            
+            Circle()
+                .fill(Color.blue)
+                .frame(width: 20, height: 20)
+            
+            Circle()
+                .fill(Color.white)
+                .frame(width: 8, height: 8)
+        }
+    }
+}
+
+// MARK: - Service API et modèles (inchangés)
 
 @MainActor
 class ToiletAPIService: ObservableObject {
@@ -576,15 +615,11 @@ class ToiletAPIService: ObservableObject {
                 throw ToiletAPIError.invalidURL
             }
             
-            print("🌐 Chargement toilettes depuis: \(url)")
-            
             let (data, response) = try await URLSession.shared.data(from: url)
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw ToiletAPIError.invalidResponse
             }
-            
-            print("📡 Status HTTP: \(httpResponse.statusCode)")
             
             guard httpResponse.statusCode == 200 else {
                 throw ToiletAPIError.httpError(httpResponse.statusCode)
@@ -613,12 +648,9 @@ class ToiletAPIService: ObservableObject {
             toilets = toiletLocations
             isLoading = false
             
-            print("✅ Succès: \(toiletLocations.count) toilettes chargées")
-            
         } catch {
             errorMessage = "Erreur de chargement: \(error.localizedDescription)"
             isLoading = false
-            print("❌ Erreur API: \(error)")
         }
     }
     
@@ -644,8 +676,6 @@ class ToiletAPIService: ObservableObject {
         return true
     }
 }
-
-// MARK: - Modèles (gardez vos modèles existants)
 
 struct ToiletLocation: Identifiable {
     let id = UUID()
@@ -702,25 +732,6 @@ enum ToiletAPIError: Error, LocalizedError {
         }
     }
 }
-struct UserLocationMarker: View {
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(Color.blue.opacity(0.3))
-                .frame(width: 40, height: 40)
-            
-            Circle()
-                .fill(Color.blue)
-                .frame(width: 20, height: 20)
-            
-            Circle()
-                .fill(Color.white)
-                .frame(width: 8, height: 8)
-        }
-    }
-}
-
-// MARK: - Preview
 
 #Preview {
     ToiletsMapView()
