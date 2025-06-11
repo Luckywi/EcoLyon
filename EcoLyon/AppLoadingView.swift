@@ -8,26 +8,25 @@ class AppInitializationService: ObservableObject {
     @Published var initializationProgress: Double = 0.0
     @Published var currentStatus = "Démarrage..."
     
-    private let locationManager = CLLocationManager()
+    private let locationService = GlobalLocationService.shared
     
     func initializeApp() async {
         // Étape 1: Services de base
         await updateProgress(0.2, "Initialisation des services...")
-        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+        try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s
         
-        // Étape 2: Permissions
-        await updateProgress(0.4, "Vérification des permissions...")
-        await checkLocationPermissions()
+        // Étape 2: Permissions et localisation
+        await updateProgress(0.4, "Localisation en cours...")
+        
+        // ✅ La localisation a déjà été démarrée dans GlobalLocationService.init()
+        // On attend juste qu'elle se termine ou timeout
+        await waitForLocationDetection()
         
         // Étape 3: Configuration
-        await updateProgress(0.6, "Configuration...")
-        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s
+        await updateProgress(0.7, "Configuration...")
+        try? await Task.sleep(nanoseconds: 400_000_000) // 0.4s
         
-        // Étape 4: Données initiales
-        await updateProgress(0.8, "Chargement des données...")
-        try? await Task.sleep(nanoseconds: 800_000_000) // 0.8s
-        
-        // Étape 5: Finalisation
+        // Étape 4: Finalisation
         await updateProgress(1.0, "Prêt !")
         try? await Task.sleep(nanoseconds: 300_000_000) // 0.3s
         
@@ -39,23 +38,27 @@ class AppInitializationService: ObservableObject {
         currentStatus = status
     }
     
-    private func checkLocationPermissions() async {
-        return await withCheckedContinuation { continuation in
-            switch locationManager.authorizationStatus {
-            case .notDetermined:
-                // Permission sera demandée plus tard par LocationManager
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    continuation.resume()
-                }
-            default:
-                continuation.resume()
-            }
+    private func waitForLocationDetection() async {
+        // ✅ Attendre max 2 secondes que la localisation se termine
+        let startTime = Date()
+        let maxWaitTime: TimeInterval = 2.0
+        
+        while !locationService.isLocationReady && Date().timeIntervalSince(startTime) < maxWaitTime {
+            try? await Task.sleep(nanoseconds: 100_000_000) // Check toutes les 100ms
+        }
+        
+        if locationService.isLocationReady {
+            let district = locationService.detectedDistrict?.name ?? "Inconnu"
+            print("✅ Localisation terminée pendant le loading: \(district)")
+        } else {
+            print("⏰ Localisation pas terminée, continuera en arrière-plan")
         }
     }
 }
 
 struct AppLoadingView: View {
     @StateObject private var initService = AppInitializationService()
+    @StateObject private var locationService = GlobalLocationService.shared
     let onComplete: () -> Void
     
     var body: some View {
@@ -101,13 +104,21 @@ struct AppLoadingView: View {
                 
                 Spacer()
                 
-                // Section de chargement
+                // Section de chargement avec info localisation
                 VStack(spacing: 24) {
                     // Barre de progression
                     VStack(spacing: 12) {
                         Text(initService.currentStatus)
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.white)
+                        
+                        // ✅ Affichage de l'arrondissement détecté
+                        if let district = locationService.detectedDistrict {
+                            Text("📍 \(district.name)")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
+                                .transition(.opacity.combined(with: .scale))
+                        }
                         
                         ZStack(alignment: .leading) {
                             // Fond de la barre
