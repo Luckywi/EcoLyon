@@ -38,14 +38,27 @@ struct EnvironmentCardView: View {
                 // Section Collecte
                 EnvironmentButtonView(
                     icon: "Silos",
-                    title: "Points de collecte",
-                    subtitle: "2 780 points de collecte référencés",
+                    title: "Recyclage du verre",
+                    subtitle: "2 780 silos répartis dans la métropole",
                     accentColor: .orange,
                     isCustomIcon: true,
                     action: {
-                        print("Points de collecte sélectionnés")
+                        print("Localisation silos verre")
                     }
                 )
+                
+                EnvironmentButtonView(
+                    icon: "Pannier",
+                    title: "Seau à compost gratuit",
+                    subtitle: "Demandez le vôtre en quelques clics",
+                    accentColor: .orange,
+                    isCustomIcon: true,
+                    action: {
+                        print("Demande seau à compost")
+                    }
+                )
+
+                
                 
                 // Section Guide
                 EnvironmentButtonView(
@@ -70,6 +83,7 @@ struct EnvironmentCardView: View {
                         print("Statistiques sélectionnées")
                     }
                 )
+                
             }
             .padding(24)
             .background(

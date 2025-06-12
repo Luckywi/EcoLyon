@@ -7,9 +7,36 @@ struct FixedBottomMenuView: View {
     
     private let menuHeight: CGFloat = 160 // Hauteur du menu étendu
     private let tabHeight: CGFloat = 60 // Hauteur de l'onglet fermé
+    private let fadeHeight: CGFloat = 15 // Zone de fade au-dessus du menu (5px + transition)
     
     var body: some View {
         ZStack {
+            // ✅ NOUVEAU : Zone de masquage invisible qui cache le contenu
+            VStack(spacing: 0) { // ✅ spacing: 0 pour éliminer l'espace
+                Spacer()
+                
+                // Zone de fade dégradé
+                LinearGradient(
+                    gradient: Gradient(stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: Color(red: 248/255, green: 247/255, blue: 244/255).opacity(0.3), location: 0.3),
+                        .init(color: Color(red: 248/255, green: 247/255, blue: 244/255).opacity(0.7), location: 0.7),
+                        .init(color: Color(red: 248/255, green: 247/255, blue: 244/255), location: 1.0)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: fadeHeight)
+                .allowsHitTesting(false) // Ne bloque pas les interactions
+                
+                // ✅ Zone opaque qui masque complètement le contenu jusqu'en bas de l'écran
+                Color(red: 248/255, green: 247/255, blue: 244/255)
+                    .frame(height: tabHeight + (isMenuExpanded ? menuHeight - tabHeight : 0) + 50) // ✅ +50 au lieu de +34 pour être sûr de couvrir tout
+                    .allowsHitTesting(false)
+            }
+            .ignoresSafeArea(.all, edges: .bottom) // ✅ Ignore la safe area en bas pour aller jusqu'au bord
+            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: isMenuExpanded)
+            
             // Filtre de fond quand le menu est ouvert
             if isMenuExpanded {
                 Color.black.opacity(0.4)

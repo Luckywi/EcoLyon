@@ -341,6 +341,7 @@ struct AirQualityRecommendationsView: View {
                 Text("Conseils & Gestes")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(.primary)
+                  
                 
                 Spacer()
             }
