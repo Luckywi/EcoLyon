@@ -31,6 +31,8 @@ struct MenuDesignSystem {
     static let toiletThemeColor = Color(red: 0.7, green: 0.7, blue: 0.7)
 }
 
+
+// ✅ MODIFICATION CRITIQUE : Éviter la fermeture automatique du menu lors du tap sur l'overlay
 struct FixedBottomMenuView: View {
     @Binding var isMenuExpanded: Bool
     @Binding var showToiletsMap: Bool
@@ -39,6 +41,9 @@ struct FixedBottomMenuView: View {
     
     // Paramètre pour le thème
     let themeColor: Color?
+    
+    // ✅ AJOUT : Référence au NavigationManager pour vérifier les transitions
+    @StateObject private var navigationManager = NavigationManager.shared
     
     // Hauteur du bouton menu + padding pour le background
     private let menuButtonHeight: CGFloat = 56
@@ -94,9 +99,12 @@ struct FixedBottomMenuView: View {
                         overlayColor
                             .ignoresSafeArea(.all)
                     }
+                    // ✅ MODIFICATION CRITIQUE : Ne fermer le menu que si on n'est pas en train de naviguer
                     .onTapGesture {
-                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                            isMenuExpanded = false
+                        if !navigationManager.isTransitioning {
+                            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                                isMenuExpanded = false
+                            }
                         }
                     }
                     .transition(.opacity)
@@ -136,8 +144,11 @@ struct FixedBottomMenuView: View {
                     
                     // Onglet du menu avec couleur adaptée au thème
                     Button(action: {
-                        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                            isMenuExpanded.toggle()
+                        // ✅ Ne permettre l'ouverture/fermeture du menu que si on n'est pas en transition
+                        if !navigationManager.isTransitioning {
+                            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                                isMenuExpanded.toggle()
+                            }
                         }
                     }) {
                         HStack(spacing: 12) {
@@ -165,6 +176,8 @@ struct FixedBottomMenuView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(PlainButtonStyle())
+                    // ✅ Désactiver le bouton pendant les transitions
+                    .disabled(navigationManager.isTransitioning)
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 0)
@@ -173,7 +186,6 @@ struct FixedBottomMenuView: View {
         }
     }
 }
-
 // MARK: - Layout redesigné selon la maquette - CORRIGÉ
 struct MenuLayoutRedesigned: View {
     let onHomeSelected: () -> Void

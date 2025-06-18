@@ -2,101 +2,35 @@ import SwiftUI
 import MapKit
 import Foundation
 
-// MARK: - BancsMapView avec structure identique à ContentView
-struct BancsMapView: View {
-    @StateObject private var bancService = BancAPIService()
+// MARK: - SilosMapView CORRIGÉ pour la nouvelle navigation
+struct SilosMapView: View {
+    @StateObject private var silosService = SilosAPIService()
     @StateObject private var locationService = GlobalLocationService.shared
     @StateObject private var navigationManager = NavigationManager.shared
-    @StateObject private var clusteringService = BancClusteringService()
     
-    // ✅ Region initialisée avec position utilisateur si disponible
+    // Region et états
     @State private var region: MKCoordinateRegion
     @State private var searchText = ""
-    @State private var addressSuggestions: [AddressSuggestion] = []
+    @State private var addressSuggestions: [SilosAddressSuggestion] = []
     @State private var showSuggestions = false
     @State private var searchedLocation: CLLocationCoordinate2D?
-    @State private var selectedCluster: BancCluster?
-    @State private var showDetailedBancs = false
     
-    // ✅ COULEUR UNIFIÉE
-    private let bancThemeColor = Color(red: 0.7, green: 0.5, blue: 0.4)
+    // ✅ COULEUR UNIFIÉE SILOS
+    private let silosThemeColor = Color(red: 0.5, green: 0.7, blue: 0.7)
     
-    // ✅ Computed property pour les 3 bancs les plus proches
-    private var nearestBancs: [BancLocation] {
+    // ✅ Computed property pour les 3 silos les plus proches
+    private var nearestSilos: [SilosLocation] {
         guard let userLocation = locationService.userLocation else { return [] }
         
-        return bancService.bancs
-            .map { banc in
+        return silosService.silos
+            .map { silo in
                 let distance = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
-                    .distance(from: CLLocation(latitude: banc.coordinate.latitude, longitude: banc.coordinate.longitude))
-                return (banc: banc, distance: distance)
+                    .distance(from: CLLocation(latitude: silo.coordinate.latitude, longitude: silo.coordinate.longitude))
+                return (silo: silo, distance: distance)
             }
             .sorted { $0.distance < $1.distance }
             .prefix(3)
-            .map { $0.banc }
-    }
-    
-    // ✅ Computed property pour les annotations clusterisées
-    private var clusteredAnnotations: [BancMapAnnotationItem] {
-        let clusters = clusteringService.clusterBancs(bancService.bancs, for: region)
-        var annotations: [BancMapAnnotationItem] = []
-        
-        // Vérifier si on doit afficher les détails d'un cluster
-        let shouldShowDetails = showDetailedBancs && selectedCluster != nil
-        
-        if shouldShowDetails, let selectedCluster = selectedCluster {
-            // Afficher uniquement les bancs du cluster sélectionné
-            for banc in selectedCluster.bancs {
-                annotations.append(BancMapAnnotationItem(
-                    banc: banc,
-                    coordinate: banc.coordinate,
-                    isSearchResult: false,
-                    isCluster: false,
-                    clusterCount: 0,
-                    clusterBancs: []
-                ))
-            }
-        } else {
-            // Affichage normal avec clusters
-            for cluster in clusters {
-                if cluster.bancs.count > 1 {
-                    // Cluster avec plusieurs bancs
-                    annotations.append(BancMapAnnotationItem(
-                        banc: nil,
-                        coordinate: cluster.centerCoordinate,
-                        isSearchResult: false,
-                        isCluster: true,
-                        clusterCount: cluster.bancs.count,
-                        clusterBancs: cluster.bancs,
-                        clusterId: cluster.id
-                    ))
-                } else if let singleBanc = cluster.bancs.first {
-                    // Banc isolé
-                    annotations.append(BancMapAnnotationItem(
-                        banc: singleBanc,
-                        coordinate: singleBanc.coordinate,
-                        isSearchResult: false,
-                        isCluster: false,
-                        clusterCount: 0,
-                        clusterBancs: []
-                    ))
-                }
-            }
-        }
-        
-        // Ajouter le pin de recherche si présent
-        if let searchedLocation = searchedLocation {
-            annotations.append(BancMapAnnotationItem(
-                banc: nil,
-                coordinate: searchedLocation,
-                isSearchResult: true,
-                isCluster: false,
-                clusterCount: 0,
-                clusterBancs: []
-            ))
-        }
-        
-        return annotations
+            .map { $0.silo }
     }
     
     // ✅ Initializer personnalisé
@@ -104,10 +38,10 @@ struct BancsMapView: View {
         let initialCenter: CLLocationCoordinate2D
         if let userLocation = GlobalLocationService.shared.userLocation {
             initialCenter = userLocation
-            print("🎯 Bancs: Initialisation avec position utilisateur")
+            print("🎯 Silos: Initialisation avec position utilisateur")
         } else {
             initialCenter = CLLocationCoordinate2D(latitude: 45.7640, longitude: 4.8357)
-            print("🏛️ Bancs: Initialisation avec Bellecour (fallback)")
+            print("🏛️ Silos: Initialisation avec Bellecour (fallback)")
         }
         
         _region = State(initialValue: MKCoordinateRegion(
@@ -124,13 +58,13 @@ struct BancsMapView: View {
                 VStack(spacing: 0) {
                     // ✅ TITRE FIXE EN HAUT
                     HStack(spacing: 12) {
-                        Image("Banc")
+                        Image("Silos")
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 50, height: 50)
-                            .foregroundColor(bancThemeColor)
+                            .foregroundColor(silosThemeColor)
                         
-                        Text("Bancs Publics")
+                        Text("Silos à Verre")
                             .font(.system(size: 24, weight: .bold))
                             .foregroundColor(.primary)
                         
@@ -142,18 +76,18 @@ struct BancsMapView: View {
                     
                     // ✅ Barre de recherche
                     VStack(spacing: 0) {
-                        BancSmartSearchBarView(
+                        SilosSmartSearchBarView(
                             searchText: $searchText,
                             suggestions: addressSuggestions,
                             showSuggestions: $showSuggestions,
                             onSearchTextChanged: handleSearchTextChange,
                             onSuggestionTapped: handleSuggestionTap,
                             onSearchSubmitted: handleSearchSubmitted,
-                            themeColor: bancThemeColor
+                            themeColor: silosThemeColor
                         )
                         
                         if showSuggestions && !addressSuggestions.isEmpty {
-                            BancSuggestionsListView(
+                            SilosSuggestionsListView(
                                 suggestions: addressSuggestions,
                                 onSuggestionTapped: handleSuggestionTap
                             )
@@ -162,40 +96,24 @@ struct BancsMapView: View {
                     .padding(.horizontal)
                     .padding(.bottom, 16)
                     
-                    // ✅ Carte avec clustering
-                    BancMapBoxView(
+                    // ✅ Carte
+                    SilosMapBoxView(
                         region: $region,
-                        bancs: bancService.bancs,
-                        clusteredAnnotations: clusteredAnnotations,
+                        silos: silosService.silos,
                         userLocation: locationService.userLocation,
                         searchedLocation: searchedLocation,
-                        isLoading: bancService.isLoading,
-                        themeColor: bancThemeColor,
-                        onClusterTapped: handleClusterTap
+                        isLoading: silosService.isLoading,
+                        themeColor: silosThemeColor
                     )
                     .padding(.horizontal)
                     .padding(.bottom, 16)
-                    .onChange(of: region) { newRegion in
-                        // Recalculer les clusters quand la région change
-                        clusteringService.updateClustering()
-                        
-                        // Vérifier si on doit masquer les détails (zoom out de plus de 100m)
-                        if showDetailedBancs, let selectedCluster = selectedCluster {
-                            let currentDistance = calculateDistanceFromCenter(to: selectedCluster.centerCoordinate, in: newRegion)
-                            if currentDistance > 100 {
-                                showDetailedBancs = false
-                                self.selectedCluster = nil
-                                print("🔍 Zoom out détecté, masquage des détails du cluster")
-                            }
-                        }
-                    }
                     
-                    // ✅ Section des 3 bancs les plus proches
-                    if !nearestBancs.isEmpty && locationService.userLocation != nil {
-                        NearestBancsView(
-                            bancs: nearestBancs,
+                    // ✅ Section des 3 silos les plus proches
+                    if !nearestSilos.isEmpty && locationService.userLocation != nil {
+                        NearestSilosView(
+                            silos: nearestSilos,
                             userLocation: locationService.userLocation!,
-                            themeColor: bancThemeColor
+                            themeColor: silosThemeColor
                         )
                         .padding(.horizontal)
                         .padding(.bottom, 30)
@@ -207,23 +125,24 @@ struct BancsMapView: View {
             }
             .background(Color(red: 248/255, green: 247/255, blue: 244/255))
             .refreshable {
-                await bancService.loadBancs()
+                await silosService.loadSilos()
             }
             
             // ✅ MENU DIRECTEMENT DANS LE ZSTACK - COMME CONTENTVIEW
             FixedBottomMenuView(
                 isMenuExpanded: $navigationManager.isMenuExpanded,
-                showToiletsMap: $navigationManager.showToiletsMap,  // ✅ CORRIGÉ
-                showBancsMap: $navigationManager.showBancsMap,      // ✅ CORRIGÉ
+                showToiletsMap: $navigationManager.showToiletsMap,
+                showBancsMap: $navigationManager.showBancsMap,
                 onHomeSelected: {
-                    navigationManager.navigateToHome()              // ✅ CORRIGÉ
+                    navigationManager.navigateToHome()
                 },
-                themeColor: Color(red: 0.7, green: 0.5, blue: 0.4)
+                themeColor: silosThemeColor
             )
+            
             .onAppear {
-                navigationManager.currentDestination = "bancs"
+                navigationManager.currentDestination = "silos"
                 setupInitialLocation()
-                loadBancs()
+                loadSilos()
             }
             .onDisappear {
                 locationService.stopLocationUpdates()
@@ -231,54 +150,28 @@ struct BancsMapView: View {
             .onChange(of: locationService.isLocationReady) { isReady in
                 if isReady, let location = locationService.userLocation {
                     centerMapOnLocation(location)
-                    print("📍 Bancs: Position mise à jour automatiquement")
-                }
-            }
-            
-            .overlay {
-                if bancService.isLoading && bancService.bancs.isEmpty {
-                    BancLoadingOverlayView(themeColor: bancThemeColor)
+                    print("📍 Silos: Position mise à jour automatiquement")
                 }
             }
             .overlay {
-                if let errorMessage = bancService.errorMessage {
-                    BancErrorOverlayView(message: errorMessage, themeColor: bancThemeColor) {
-                        loadBancs()
+                if silosService.isLoading && silosService.silos.isEmpty {
+                    SilosLoadingOverlayView(themeColor: silosThemeColor)
+                }
+            }
+            .overlay {
+                if let errorMessage = silosService.errorMessage {
+                    SilosErrorOverlayView(message: errorMessage, themeColor: silosThemeColor) {
+                        loadSilos()
                     }
                 }
             }
         }
     }
     
-    // MARK: - ✅ NOUVELLE FONCTION POUR GÉRER LE TAP SUR CLUSTER
-    private func handleClusterTap(_ cluster: BancCluster) {
-        selectedCluster = cluster
-        showDetailedBancs = true
-        
-        // Zoomer sur le cluster avec une vue détaillée
-        let clusterRegion = MKCoordinateRegion(
-            center: cluster.centerCoordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.002, longitudeDelta: 0.002) // Zoom très proche
-        )
-        
-        withAnimation(.easeInOut(duration: 0.6)) {
-            region = clusterRegion
-        }
-        
-        print("🎯 Zoom sur cluster: \(cluster.bancs.count) bancs à afficher en détail")
-    }
-    
-    // MARK: - ✅ FONCTION POUR CALCULER LA DISTANCE DEPUIS LE CENTRE
-    private func calculateDistanceFromCenter(to coordinate: CLLocationCoordinate2D, in region: MKCoordinateRegion) -> Double {
-        let regionCenter = CLLocation(latitude: region.center.latitude, longitude: region.center.longitude)
-        let targetLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        return regionCenter.distance(from: targetLocation)
-    }
-    
-    // MARK: - Fonctions optimisées (inchangées)
+    // MARK: - Fonctions optimisées
     
     private func setupInitialLocation() {
-        print("🗺️ Setup initial - bancs")
+        print("🗺️ Setup initial - silos")
         
         if locationService.userLocation == nil {
             print("🔄 Position pas encore disponible, refresh en cours...")
@@ -288,9 +181,9 @@ struct BancsMapView: View {
         }
     }
     
-    private func loadBancs() {
+    private func loadSilos() {
         Task {
-            await bancService.loadBancs()
+            await silosService.loadSilos()
         }
     }
     
@@ -309,7 +202,7 @@ struct BancsMapView: View {
         }
     }
     
-    private func handleSuggestionTap(_ suggestion: AddressSuggestion) {
+    private func handleSuggestionTap(_ suggestion: SilosAddressSuggestion) {
         searchText = suggestion.title
         showSuggestions = false
         searchedLocation = suggestion.coordinate
@@ -327,30 +220,6 @@ struct BancsMapView: View {
         }
     }
     
-    private func centerOnUserLocation() {
-        print("🎯 Demande de centrage sur utilisateur")
-        
-        if let userLocation = locationService.userLocation {
-            print("✅ Position disponible, centrage immédiat")
-            centerMapOnLocation(userLocation)
-        } else {
-            print("🔄 Position indisponible, demande de refresh")
-            locationService.refreshLocation()
-            
-            let startTime = Date()
-            Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { timer in
-                if let userLocation = locationService.userLocation {
-                    timer.invalidate()
-                    centerMapOnLocation(userLocation)
-                    print("✅ Position reçue après \(Date().timeIntervalSince(startTime))s")
-                } else if Date().timeIntervalSince(startTime) > 2.0 {
-                    timer.invalidate()
-                    print("⏰ Pas de position après 2s - garder position actuelle")
-                }
-            }
-        }
-    }
-    
     private func centerMapOnLocation(_ coordinate: CLLocationCoordinate2D) {
         withAnimation(.easeInOut(duration: 0.5)) {
             region.center = coordinate
@@ -358,8 +227,8 @@ struct BancsMapView: View {
         }
     }
     
-    // Fonctions de géocodage (inchangées)
-    private func searchAddresses(query: String) async -> [AddressSuggestion] {
+    // Fonctions de géocodage
+    private func searchAddresses(query: String) async -> [SilosAddressSuggestion] {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return []
         }
@@ -399,7 +268,7 @@ struct BancsMapView: View {
                 } ?? []
                 
                 let suggestions = filteredItems.prefix(5).map { item in
-                    AddressSuggestion(
+                    SilosAddressSuggestion(
                         title: item.name ?? "Sans nom",
                         subtitle: self.formatFrenchAddress(item.placemark),
                         coordinate: item.placemark.coordinate
@@ -449,140 +318,25 @@ struct BancsMapView: View {
     }
 }
 
-// MARK: - ✅ NOUVEAU SERVICE DE CLUSTERING
-@MainActor
-class BancClusteringService: ObservableObject {
-    private var lastRegion: MKCoordinateRegion?
-    private var lastClusterTime: Date = Date.distantPast
-    private let clusteringThreshold: TimeInterval = 0.5 // 500ms de délai
-    
-    func clusterBancs(_ bancs: [BancLocation], for region: MKCoordinateRegion) -> [BancCluster] {
-        // Optimisation : ne pas recalculer si la région n'a pas changé significativement
-        if let lastRegion = lastRegion,
-           abs(lastRegion.center.latitude - region.center.latitude) < 0.001 &&
-           abs(lastRegion.center.longitude - region.center.longitude) < 0.001 &&
-           abs(lastRegion.span.latitudeDelta - region.span.latitudeDelta) < 0.001 &&
-           Date().timeIntervalSince(lastClusterTime) < clusteringThreshold {
-            // Retourner les clusters existants si disponibles
-            if !cachedClusters.isEmpty {
-                return cachedClusters
-            }
-        }
-        
-        lastRegion = region
-        lastClusterTime = Date()
-        
-        // Filtrer les bancs visibles dans la région actuelle avec une marge
-        let margin = 1.5 // Marge pour inclure les bancs légèrement hors écran
-        let visibleBancs = bancs.filter { banc in
-            let latDiff = abs(banc.coordinate.latitude - region.center.latitude)
-            let lonDiff = abs(banc.coordinate.longitude - region.center.longitude)
-            
-            return latDiff <= (region.span.latitudeDelta * margin / 2) &&
-                   lonDiff <= (region.span.longitudeDelta * margin / 2)
-        }
-        
-        print("🔍 Clustering: \(visibleBancs.count) bancs visibles sur \(bancs.count) total")
-        
-        // Calculer la distance de clustering adaptée au zoom
-        let clusterDistance = calculateClusterDistance(for: region)
-        
-        // Algorithme de clustering simple mais efficace
-        var clusters: [BancCluster] = []
-        var processedBancs = Set<UUID>()
-        
-        for banc in visibleBancs {
-            if processedBancs.contains(banc.id) { continue }
-            
-            var clusterBancs = [banc]
-            processedBancs.insert(banc.id)
-            
-            // Trouver les bancs proches
-            for otherBanc in visibleBancs {
-                if processedBancs.contains(otherBanc.id) { continue }
-                
-                let distance = banc.coordinate.distance(to: otherBanc.coordinate)
-                if distance <= clusterDistance {
-                    clusterBancs.append(otherBanc)
-                    processedBancs.insert(otherBanc.id)
-                }
-            }
-            
-            // Créer le cluster
-            let centerCoordinate = calculateCenterCoordinate(for: clusterBancs)
-            clusters.append(BancCluster(
-                bancs: clusterBancs,
-                centerCoordinate: centerCoordinate
-            ))
-        }
-        
-        cachedClusters = clusters
-
-        return clusters
-    }
-    
-    private var cachedClusters: [BancCluster] = []
-    
-    func updateClustering() {
-        // Force la mise à jour au prochain appel
-        lastClusterTime = Date.distantPast
-    }
-    
-    private func calculateClusterDistance(for region: MKCoordinateRegion) -> Double {
-        // Distance de clustering adaptée au niveau de zoom
-        // Plus on est zoomé, plus la distance de clustering est petite
-        let baseDistance = 200.0 // 200 mètres de base
-        let zoomFactor = region.span.latitudeDelta / 0.01 // Facteur basé sur le span
-        
-        return baseDistance * max(0.1, zoomFactor)
-    }
-    
-    private func calculateCenterCoordinate(for bancs: [BancLocation]) -> CLLocationCoordinate2D {
-        guard !bancs.isEmpty else {
-            return CLLocationCoordinate2D(latitude: 0, longitude: 0)
-        }
-        
-        let totalLat = bancs.reduce(0) { $0 + $1.coordinate.latitude }
-        let totalLon = bancs.reduce(0) { $0 + $1.coordinate.longitude }
-        
-        return CLLocationCoordinate2D(
-            latitude: totalLat / Double(bancs.count),
-            longitude: totalLon / Double(bancs.count)
-        )
-    }
-}
-
-// MARK: - ✅ MODÈLES POUR LE CLUSTERING
-struct BancCluster: Identifiable {
+// MARK: - Modèles nécessaires
+struct SilosAddressSuggestion: Identifiable, Hashable {
     let id = UUID()
-    let bancs: [BancLocation]
-    let centerCoordinate: CLLocationCoordinate2D
-}
-
-// MARK: - ✅ EXTENSIONS POUR LE CLUSTERING
-extension CLLocationCoordinate2D {
-    func distance(to coordinate: CLLocationCoordinate2D) -> Double {
-        let location1 = CLLocation(latitude: self.latitude, longitude: self.longitude)
-        let location2 = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        return location1.distance(from: location2)
+    let title: String
+    let subtitle: String
+    let coordinate: CLLocationCoordinate2D
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+    
+    static func == (lhs: SilosAddressSuggestion, rhs: SilosAddressSuggestion) -> Bool {
+        lhs.id == rhs.id
     }
 }
 
-// ✅ EXTENSION POUR RENDRE MKCoordinateRegion EQUATABLE
-extension MKCoordinateRegion: Equatable {
-    public static func == (lhs: MKCoordinateRegion, rhs: MKCoordinateRegion) -> Bool {
-        return abs(lhs.center.latitude - rhs.center.latitude) < 0.000001 &&
-               abs(lhs.center.longitude - rhs.center.longitude) < 0.000001 &&
-               abs(lhs.span.latitudeDelta - rhs.span.latitudeDelta) < 0.000001 &&
-               abs(lhs.span.longitudeDelta - rhs.span.longitudeDelta) < 0.000001
-    }
-}
-
-// MARK: - Modèles nécessaires (utilise ceux de ToiletsMapView pour éviter les conflits)
-
-// MARK: - ✅ NOUVELLE SECTION - Bancs les plus proches
-struct NearestBancsView: View {
-    let bancs: [BancLocation]
+// MARK: - ✅ NOUVELLE SECTION - Silos les plus proches
+struct NearestSilosView: View {
+    let silos: [SilosLocation]
     let userLocation: CLLocationCoordinate2D
     let themeColor: Color
     
@@ -590,7 +344,7 @@ struct NearestBancsView: View {
         VStack(alignment: .leading, spacing: 12) {
             // En-tête SANS ICÔNE
             HStack {
-                Text("Bancs les plus proches")
+                Text("Silos les plus proches")
                     .font(.headline)
                     .foregroundColor(.primary)
                 
@@ -599,11 +353,11 @@ struct NearestBancsView: View {
             .padding(.horizontal)
             .padding(.top)
             
-            // Liste des 3 bancs
+            // Liste des 3 silos
             VStack(spacing: 8) {
-                ForEach(bancs) { banc in
-                    NearestBancRowView(
-                        banc: banc,
+                ForEach(silos) { silo in
+                    NearestSilosRowView(
+                        silo: silo,
                         userLocation: userLocation,
                         themeColor: themeColor
                     )
@@ -618,16 +372,16 @@ struct NearestBancsView: View {
     }
 }
 
-struct NearestBancRowView: View {
-    let banc: BancLocation
+struct NearestSilosRowView: View {
+    let silo: SilosLocation
     let userLocation: CLLocationCoordinate2D
     let themeColor: Color
     @State private var showNavigationAlert = false
     
     private var distance: String {
         let userCLLocation = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
-        let bancLocation = CLLocation(latitude: banc.coordinate.latitude, longitude: banc.coordinate.longitude)
-        let distanceInMeters = userCLLocation.distance(from: bancLocation)
+        let siloLocation = CLLocation(latitude: silo.coordinate.latitude, longitude: silo.coordinate.longitude)
+        let distanceInMeters = userCLLocation.distance(from: siloLocation)
         
         if distanceInMeters < 1000 {
             return "\(Int(distanceInMeters))m"
@@ -641,16 +395,16 @@ struct NearestBancRowView: View {
             showNavigationAlert = true
         }) {
             HStack(spacing: 12) {
-                // Icône Banc AGRANDIE x2 (48px au lieu de 24px)
-                Image("Banc")
+                // Icône Silos AGRANDIE x2 (48px au lieu de 24px)
+                Image("Silos")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 48, height: 48)
                     .foregroundColor(themeColor)
                 
-                // Informations banc - UNIQUEMENT L'ADRESSE
+                // Informations silo - UNIQUEMENT L'ADRESSE
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(banc.address)
+                    Text(silo.address)
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
@@ -659,7 +413,7 @@ struct NearestBancRowView: View {
                     
                     // Badges statut
                     HStack(spacing: 8) {
-                        if banc.isAccessible {
+                        if silo.isAccessible {
                             Text("♿ Accessible")
                                 .font(.caption2)
                                 .padding(.horizontal, 6)
@@ -669,8 +423,8 @@ struct NearestBancRowView: View {
                                 .cornerRadius(4)
                         }
                         
-                        if banc.hasShadow {
-                            Text("🌳 Ombragé")
+                        if !silo.type.isEmpty {
+                            Text("📦 \(silo.type)")
                                 .font(.caption2)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
@@ -704,20 +458,20 @@ struct NearestBancRowView: View {
         .cornerRadius(12)
         .alert("Navigation", isPresented: $showNavigationAlert) {
             Button("Ouvrir dans Plans") {
-                openNavigationToBanc()
+                openNavigationToSilo()
             }
             Button("Annuler", role: .cancel) { }
         } message: {
-            Text("Voulez-vous ouvrir la navigation vers ce banc ?")
+            Text("Voulez-vous ouvrir la navigation vers ce silo ?")
         }
     }
     
-    private func openNavigationToBanc() {
-        let coordinate = banc.coordinate
+    private func openNavigationToSilo() {
+        let coordinate = silo.coordinate
         let placemark = MKPlacemark(coordinate: coordinate)
         let mapItem = MKMapItem(placemark: placemark)
         
-        mapItem.name = banc.address // Utilise l'adresse comme nom
+        mapItem.name = silo.address // Utilise l'adresse comme nom
         
         let launchOptions: [String: Any] = [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking,
@@ -726,27 +480,37 @@ struct NearestBancRowView: View {
         
         mapItem.openInMaps(launchOptions: launchOptions)
         
-        print("🧭 Navigation à pied lancée vers: \(banc.address) (\(coordinate.latitude), \(coordinate.longitude))")
+        print("🧭 Navigation à pied lancée vers: \(silo.address) (\(coordinate.latitude), \(coordinate.longitude))")
     }
 }
 
 // MARK: - Composants UI avec couleur uniforme
 
-struct BancMapBoxView: View {
+struct SilosMapBoxView: View {
     @Binding var region: MKCoordinateRegion
-    let bancs: [BancLocation]
-    let clusteredAnnotations: [BancMapAnnotationItem]
+    let silos: [SilosLocation]
     let userLocation: CLLocationCoordinate2D?
     let searchedLocation: CLLocationCoordinate2D?
     let isLoading: Bool
     let themeColor: Color
-    let onClusterTapped: (BancCluster) -> Void
+    
+    private var stableAnnotations: [SilosMapAnnotationItem] {
+        var annotations = silos.map { silo in
+            SilosMapAnnotationItem(silo: silo, coordinate: silo.coordinate, isSearchResult: false)
+        }
+        
+        if let searchedLocation = searchedLocation {
+            annotations.append(SilosMapAnnotationItem(silo: nil, coordinate: searchedLocation, isSearchResult: true))
+        }
+        
+        return annotations
+    }
     
     var body: some View {
         VStack(spacing: 0) {
-            // ✅ En-tête avec nombre de bancs et bouton "Ma position"
+            // ✅ En-tête avec nombre de silos et bouton "Ma position"
             HStack {
-                Text("Carte des bancs (\(bancs.count))")
+                Text("Carte des silos (\(silos.count))")
                     .font(.headline)
                     .foregroundColor(.primary)
                 
@@ -791,36 +555,23 @@ struct BancMapBoxView: View {
             .padding()
             .background(themeColor.opacity(0.2))
             
-            // ✅ Map avec annotations clusterisées
+            // ✅ Map avec icônes Silos personnalisées
             Map(coordinateRegion: $region,
                 interactionModes: [.pan, .zoom],
                 showsUserLocation: true,
-                annotationItems: clusteredAnnotations) { annotation in
+                annotationItems: stableAnnotations) { annotation in
                 MapAnnotation(coordinate: annotation.coordinate) {
-                    if annotation.isCluster {
-                        BancClusterMarkerView(
-                            count: annotation.clusterCount,
-                            bancs: annotation.clusterBancs,
-                            themeColor: themeColor,
-                            onTapped: {
-                                let cluster = BancCluster(
-                                    bancs: annotation.clusterBancs,
-                                    centerCoordinate: annotation.coordinate
-                                )
-                                onClusterTapped(cluster)
-                            }
-                        )
-                        .id("cluster-\(annotation.id)")
-                    } else if let banc = annotation.banc {
-                        BancMarkerView(banc: banc, themeColor: themeColor)
-                            .id("banc-\(banc.id)")
+                    if let silo = annotation.silo {
+                        SilosMarkerView(silo: silo, themeColor: themeColor)
+                            .id("silo-\(silo.id)")
                     } else if annotation.isSearchResult {
-                        BancSearchPinMarker()
+                        SilosSearchPinMarker()
                             .id("search-pin")
                     }
                 }
             }
-            .frame(height: 350) // ✅ Réduit la hauteur pour faire de la place
+        
+            .frame(height: 350)
         }
         .background(Color(.systemBackground))
         .cornerRadius(16)
@@ -843,187 +594,15 @@ struct BancMapBoxView: View {
     }
 }
 
-// MARK: - ✅ NOUVEAU MARQUEUR DE CLUSTER
-struct BancClusterMarkerView: View {
-    let count: Int
-    let bancs: [BancLocation]
-    let themeColor: Color
-    let onTapped: () -> Void
-    
-    var body: some View {
-        Button(action: onTapped) {
-            ZStack {
-                // Cercle de fond avec dégradé
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            gradient: Gradient(colors: [
-                                themeColor.opacity(0.8),
-                                themeColor
-                            ]),
-                            center: .center,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-                    .frame(width: 40, height: 40)
-                    .shadow(color: .black.opacity(0.3), radius: 3, x: 1, y: 1)
-                
-                // Bordure blanche
-                Circle()
-                    .stroke(Color.white, lineWidth: 2)
-                    .frame(width: 40, height: 40)
-                
-                // Nombre de bancs
-                Text("\(count)")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
-            }
-        }
-        .scaleEffect(1.1)
-    }
-}
-
-// MARK: - ✅ VUE DÉTAIL DU CLUSTER
-struct BancClusterDetailView: View {
-    let bancs: [BancLocation]
-    let themeColor: Color
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(bancs) { banc in
-                        BancClusterRowView(banc: banc, themeColor: themeColor)
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("Bancs dans cette zone")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarItems(trailing: Button("Fermer") {
-                dismiss()
-            })
-        }
-    }
-}
-
-struct BancClusterRowView: View {
-    let banc: BancLocation
-    let themeColor: Color
-    @State private var showNavigationAlert = false
-    
-    var body: some View {
-        Button(action: {
-            showNavigationAlert = true
-        }) {
-            HStack(spacing: 12) {
-                // Icône Banc
-                Image("Banc")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 32, height: 32)
-                    .foregroundColor(themeColor)
-                
-                // Informations banc
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(banc.address)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
-                    
-                    // Badges
-                    HStack(spacing: 6) {
-                        if banc.isAccessible {
-                            Text("♿")
-                                .font(.caption)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 2)
-                                .background(Color.green.opacity(0.2))
-                                .cornerRadius(4)
-                        }
-                        
-                        if banc.hasShadow {
-                            Text("🌳")
-                                .font(.caption)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 2)
-                                .background(Color.blue.opacity(0.2))
-                                .cornerRadius(4)
-                        }
-                    }
-                }
-                
-                Spacer()
-                
-                // Icône navigation
-                Image(systemName: "location.north.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(.white)
-                    .frame(width: 28, height: 28)
-                    .background(themeColor)
-                    .clipShape(Circle())
-            }
-        }
-        .padding()
-        .background(Color(.systemGray6).opacity(0.5))
-        .cornerRadius(12)
-        .alert("Navigation", isPresented: $showNavigationAlert) {
-            Button("Ouvrir dans Plans") {
-                openNavigationToBanc()
-            }
-            Button("Annuler", role: .cancel) { }
-        } message: {
-            Text("Voulez-vous ouvrir la navigation vers ce banc ?")
-        }
-    }
-    
-    private func openNavigationToBanc() {
-        let coordinate = banc.coordinate
-        let placemark = MKPlacemark(coordinate: coordinate)
-        let mapItem = MKMapItem(placemark: placemark)
-        
-        mapItem.name = banc.address
-        
-        let launchOptions: [String: Any] = [
-            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking,
-            MKLaunchOptionsShowsTrafficKey: false
-        ]
-        
-        mapItem.openInMaps(launchOptions: launchOptions)
-        
-        print("🧭 Navigation lancée vers: \(banc.address)")
-    }
-}
-
-struct BancMapAnnotationItem: Identifiable {
+struct SilosMapAnnotationItem: Identifiable {
     let id = UUID()
-    let banc: BancLocation?
+    let silo: SilosLocation?
     let coordinate: CLLocationCoordinate2D
     let isSearchResult: Bool
-    let isCluster: Bool
-    let clusterCount: Int
-    let clusterBancs: [BancLocation]
-    let clusterId: UUID?
-    
-    init(banc: BancLocation?, coordinate: CLLocationCoordinate2D, isSearchResult: Bool, isCluster: Bool = false, clusterCount: Int = 0, clusterBancs: [BancLocation] = [], clusterId: UUID? = nil) {
-        self.banc = banc
-        self.coordinate = coordinate
-        self.isSearchResult = isSearchResult
-        self.isCluster = isCluster
-        self.clusterCount = clusterCount
-        self.clusterBancs = clusterBancs
-        self.clusterId = clusterId
-    }
     
     var stableId: String {
-        if isCluster {
-            return "cluster-\(coordinate.latitude)-\(coordinate.longitude)-\(clusterCount)"
-        } else if let banc = banc {
-            return "banc-\(banc.id)"
+        if let silo = silo {
+            return "silo-\(silo.id)"
         } else if isSearchResult {
             return "search-pin"
         } else {
@@ -1032,14 +611,12 @@ struct BancMapAnnotationItem: Identifiable {
     }
 }
 
-// MARK: - Composants UI spécifiques aux bancs (évite les conflits avec ToiletsMapView)
-
-struct BancSmartSearchBarView: View {
+struct SilosSmartSearchBarView: View {
     @Binding var searchText: String
-    let suggestions: [AddressSuggestion]
+    let suggestions: [SilosAddressSuggestion]
     @Binding var showSuggestions: Bool
     let onSearchTextChanged: (String) -> Void
-    let onSuggestionTapped: (AddressSuggestion) -> Void
+    let onSuggestionTapped: (SilosAddressSuggestion) -> Void
     let onSearchSubmitted: () -> Void
     let themeColor: Color
     
@@ -1089,9 +666,9 @@ struct BancSmartSearchBarView: View {
     }
 }
 
-struct BancSuggestionsListView: View {
-    let suggestions: [AddressSuggestion]
-    let onSuggestionTapped: (AddressSuggestion) -> Void
+struct SilosSuggestionsListView: View {
+    let suggestions: [SilosAddressSuggestion]
+    let onSuggestionTapped: (SilosAddressSuggestion) -> Void
     
     var body: some View {
         VStack(spacing: 0) {
@@ -1128,7 +705,7 @@ struct BancSuggestionsListView: View {
     }
 }
 
-struct BancLoadingOverlayView: View {
+struct SilosLoadingOverlayView: View {
     let themeColor: Color
     
     var body: some View {
@@ -1141,7 +718,7 @@ struct BancLoadingOverlayView: View {
                     .scaleEffect(1.5)
                     .tint(themeColor)
                 
-                Text("Chargement des bancs...")
+                Text("Chargement des silos...")
                     .font(.headline)
                     .foregroundColor(.primary)
             }
@@ -1157,7 +734,7 @@ struct BancLoadingOverlayView: View {
     }
 }
 
-struct BancErrorOverlayView: View {
+struct SilosErrorOverlayView: View {
     let message: String
     let themeColor: Color
     let onRetry: () -> Void
@@ -1202,8 +779,8 @@ struct BancErrorOverlayView: View {
 }
 
 // ✅ MARQUEUR MODIFIÉ - ICÔNE SEULE SANS BACKGROUND
-struct BancMarkerView: View {
-    let banc: BancLocation
+struct SilosMarkerView: View {
+    let silo: SilosLocation
     let themeColor: Color
     @State private var showNavigationAlert = false
     
@@ -1213,7 +790,7 @@ struct BancMarkerView: View {
         }) {
             ZStack {
                 // ✅ PLUS DE BACKGROUND CIRCULAIRE - JUSTE L'ICÔNE
-                Image("Banc")
+                Image("Silos")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 28, height: 28)
@@ -1221,14 +798,14 @@ struct BancMarkerView: View {
                     .shadow(color: .black.opacity(0.3), radius: 2, x: 1, y: 1) // Ombre pour la visibilité
                 
                 // Bordure verte si accessible (autour de l'icône)
-                if banc.isAccessible {
+                if silo.isAccessible {
                     RoundedRectangle(cornerRadius: 4)
                         .stroke(Color.green, lineWidth: 2)
                         .frame(width: 32, height: 32)
                 }
                 
-                // Bordure bleue si ombragé (autour de l'icône)
-                if banc.hasShadow {
+                // Bordure bleue pour type spécial (autour de l'icône)
+                if !silo.type.isEmpty {
                     RoundedRectangle(cornerRadius: 4)
                         .stroke(Color.blue, lineWidth: 2)
                         .frame(width: 34, height: 34)
@@ -1241,16 +818,16 @@ struct BancMarkerView: View {
             }
             Button("Annuler", role: .cancel) { }
         } message: {
-            Text("Voulez-vous ouvrir la navigation vers \(banc.name) ?")
+            Text("Voulez-vous ouvrir la navigation vers \(silo.name) ?")
         }
     }
     
     private func openInMaps() {
-        let coordinate = banc.coordinate
+        let coordinate = silo.coordinate
         let placemark = MKPlacemark(coordinate: coordinate)
         let mapItem = MKMapItem(placemark: placemark)
         
-        mapItem.name = banc.name
+        mapItem.name = silo.name
         mapItem.phoneNumber = nil
         
         let launchOptions: [String: Any] = [
@@ -1260,11 +837,11 @@ struct BancMarkerView: View {
         
         mapItem.openInMaps(launchOptions: launchOptions)
         
-        print("🧭 Navigation lancée vers: \(banc.name) (\(coordinate.latitude), \(coordinate.longitude))")
+        print("🧭 Navigation lancée vers: \(silo.name) (\(coordinate.latitude), \(coordinate.longitude))")
     }
 }
 
-struct BancSearchPinMarker: View {
+struct SilosSearchPinMarker: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
@@ -1295,65 +872,69 @@ struct BancSearchPinMarker: View {
     }
 }
 
-// MARK: - Service API et modèles (inchangés)
+// MARK: - Service API et modèles
 
 @MainActor
-class BancAPIService: ObservableObject {
-    @Published var bancs: [BancLocation] = []
+class SilosAPIService: ObservableObject {
+    @Published var silos: [SilosLocation] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     
-    private let apiURL = "https://data.grandlyon.com/geoserver/metropole-de-lyon/ows?SERVICE=WFS&VERSION=2.0.0&request=GetFeature&typename=metropole-de-lyon:adr_voie_lieu.adrbanc_latest&outputFormat=application/json&SRSNAME=EPSG:4171&startIndex=0&sortby=gid"
+    private let apiURL = "https://data.grandlyon.com/geoserver/metropole-de-lyon/ows?SERVICE=WFS&VERSION=2.0.0&request=GetFeature&typename=metropole-de-lyon:gic_collecte.siloverre&outputFormat=application/json&SRSNAME=EPSG:4171&startIndex=0&sortby=gid"
     
-    func loadBancs() async {
+    func loadSilos() async {
         isLoading = true
         errorMessage = nil
         
         do {
             guard let url = URL(string: apiURL) else {
-                throw BancAPIError.invalidURL
+                throw SilosAPIError.invalidURL
             }
             
             let (data, response) = try await URLSession.shared.data(from: url)
             
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw BancAPIError.invalidResponse
+                throw SilosAPIError.invalidResponse
             }
             
             guard httpResponse.statusCode == 200 else {
-                throw BancAPIError.httpError(httpResponse.statusCode)
+                throw SilosAPIError.httpError(httpResponse.statusCode)
             }
             
-            let geoJsonResponse = try JSONDecoder().decode(BancGeoJSONResponse.self, from: data)
+            let geoJsonResponse = try JSONDecoder().decode(SilosGeoJSONResponse.self, from: data)
             
-            let bancLocations = geoJsonResponse.features.compactMap { feature -> BancLocation? in
+            let silosLocations = geoJsonResponse.features.compactMap { feature -> SilosLocation? in
                 guard feature.geometry.coordinates.count >= 2 else { return nil }
                 
                 let longitude = feature.geometry.coordinates[0]
                 let latitude = feature.geometry.coordinates[1]
                 let props = feature.properties
                 
-                return BancLocation(
+                return SilosLocation(
                     coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
-                    name: props.nom ?? "Banc public",
+                    name: props.nom ?? "Silo à verre",
                     address: formatAddress(props),
                     gestionnaire: props.gestionnaire ?? "Non spécifié",
-                    isAccessible: props.acces_pmr == "Oui",
-                    hasShadow: props.ombrage == "Oui",
-                    materiau: props.materiau
+                    isAccessible: props.acces_pmr == "Oui" || props.acces_pmr == "oui",
+                    type: props.type_silo ?? "",
+                    capacite: props.capacite,
+                    commune: props.commune ?? ""
                 )
             }
             
-            bancs = bancLocations
+            silos = silosLocations
             isLoading = false
+            
+            print("✅ \(silos.count) silos chargés avec succès")
             
         } catch {
             errorMessage = "Erreur de chargement: \(error.localizedDescription)"
             isLoading = false
+            print("❌ Erreur chargement silos: \(error)")
         }
     }
     
-    private func formatAddress(_ props: BancProperties) -> String {
+    private func formatAddress(_ props: SilosProperties) -> String {
         var addressParts: [String] = []
         
         if let adresse = props.adresse {
@@ -1372,35 +953,36 @@ class BancAPIService: ObservableObject {
     }
 }
 
-struct BancLocation: Identifiable {
+struct SilosLocation: Identifiable {
     let id = UUID()
     let coordinate: CLLocationCoordinate2D
     let name: String
     let address: String
     let gestionnaire: String
     let isAccessible: Bool
-    let hasShadow: Bool
-    let materiau: String?
+    let type: String
+    let capacite: String?
+    let commune: String
 }
 
-struct BancGeoJSONResponse: Codable {
+struct SilosGeoJSONResponse: Codable {
     let type: String
-    let features: [BancFeature]
+    let features: [SilosFeature]
     let totalFeatures: Int?
 }
 
-struct BancFeature: Codable {
+struct SilosFeature: Codable {
     let type: String
-    let geometry: BancGeometry
-    let properties: BancProperties
+    let geometry: SilosGeometry
+    let properties: SilosProperties
 }
 
-struct BancGeometry: Codable {
+struct SilosGeometry: Codable {
     let type: String
     let coordinates: [Double]
 }
 
-struct BancProperties: Codable {
+struct SilosProperties: Codable {
     let gid: Int?
     let nom: String?
     let adresse: String?
@@ -1408,11 +990,11 @@ struct BancProperties: Codable {
     let commune: String?
     let gestionnaire: String?
     let acces_pmr: String?
-    let ombrage: String?
-    let materiau: String?
+    let type_silo: String?
+    let capacite: String?
 }
 
-enum BancAPIError: Error, LocalizedError {
+enum SilosAPIError: Error, LocalizedError {
     case invalidURL
     case invalidResponse
     case httpError(Int)
@@ -1430,5 +1012,5 @@ enum BancAPIError: Error, LocalizedError {
 }
 
 #Preview {
-    BancsMapView()
+    SilosMapView()
 }
