@@ -7,11 +7,7 @@ struct BancsMapView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var bancService = BancAPIService()
     @StateObject private var locationService = GlobalLocationService.shared
-    
-    // États pour le menu
-    @State private var isMenuExpanded = false
-    @State private var showToiletsMap = false
-    @State private var showBancsMap = false
+    @StateObject private var navigationManager = NavigationManager.shared
     
     // ✅ Region initialisée avec position utilisateur si disponible
     @State private var region: MKCoordinateRegion
@@ -135,16 +131,15 @@ struct BancsMapView: View {
             
             // ✅ MENU DIRECTEMENT DANS LE ZSTACK - COMME CONTENTVIEW
             FixedBottomMenuView(
-                isMenuExpanded: $isMenuExpanded,
-                showToiletsMap: $showToiletsMap,
-                showBancsMap: $showBancsMap,
-                onHomeSelected: {
-                    dismiss()
-                },
-                themeColor: Color(red: 0.7, green: 0.5, blue: 0.4) // ✅ Couleur bancs
+                isMenuExpanded: $navigationManager.isMenuExpanded,
+                showToiletsMap: .constant(false),
+                showBancsMap: .constant(false),
+                onHomeSelected: { dismiss() },
+                themeColor: Color(red: 0.7, green: 0.5, blue: 0.4)
             )
         }
         .onAppear {
+            navigationManager.currentDestination = "bancs"
             setupInitialLocation()
             loadBancs()
         }
@@ -157,18 +152,11 @@ struct BancsMapView: View {
                 print("📍 Bancs: Position mise à jour automatiquement")
             }
         }
-        .onChange(of: showToiletsMap) { newValue in
-            if newValue {
-                dismiss() // Ferme d'abord la page bancs
-                
-                // Puis ouvre les toilettes après un délai
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    NotificationCenter.default.post(
-                        name: NSNotification.Name("NavigateToToilets"),
-                        object: nil
-                    )
-                }
-            }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToToilets"))) { _ in
+            dismiss()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToHome"))) { _ in
+            dismiss()
         }
         .overlay {
             if bancService.isLoading && bancService.bancs.isEmpty {

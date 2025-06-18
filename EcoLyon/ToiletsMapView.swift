@@ -7,11 +7,8 @@ struct ToiletsMapView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var toiletService = ToiletAPIService()
     @StateObject private var locationService = GlobalLocationService.shared
+    @StateObject private var navigationManager = NavigationManager.shared
     
-    // États pour le menu
-    @State private var isMenuExpanded = false
-    @State private var showToiletsMap = false
-    @State private var showBancsMap = false
     
     // ✅ Region initialisée avec position utilisateur si disponible
     @State private var region: MKCoordinateRegion
@@ -136,16 +133,15 @@ struct ToiletsMapView: View {
             
             // ✅ MENU DIRECTEMENT DANS LE ZSTACK - COMME CONTENTVIEW
             FixedBottomMenuView(
-                isMenuExpanded: $isMenuExpanded,
-                showToiletsMap: $showToiletsMap,
-                showBancsMap: $showBancsMap,
-                onHomeSelected: {
-                    dismiss()
-                },
-                themeColor: Color(red: 0.7, green: 0.7, blue: 0.7) // ✅ Couleur toilettes
+                isMenuExpanded: $navigationManager.isMenuExpanded,
+                showToiletsMap: .constant(false),
+                showBancsMap: .constant(false),
+                onHomeSelected: { dismiss() },
+                themeColor: Color(red: 0.7, green: 0.7, blue: 0.7)
             )
         }
         .onAppear {
+            navigationManager.currentDestination = "toilets"
             setupInitialLocation()
             loadToilets()
         }
@@ -158,19 +154,12 @@ struct ToiletsMapView: View {
                 print("📍 Toilettes: Position mise à jour automatiquement")
             }
         }
-        .onChange(of: showBancsMap) { newValue in
-               if newValue {
-                   dismiss() // Ferme d'abord la page toilettes
-                   
-                   // Puis ouvre les bancs après un délai
-                   DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                       NotificationCenter.default.post(
-                           name: NSNotification.Name("NavigateToBancs"),
-                           object: nil
-                       )
-                   }
-               }
-           }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToBancs"))) { _ in
+            dismiss()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToHome"))) { _ in
+            dismiss()
+        }
         .overlay {
             if toiletService.isLoading && toiletService.toilets.isEmpty {
                 LoadingOverlayView(themeColor: toiletThemeColor)

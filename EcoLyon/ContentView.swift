@@ -1,10 +1,11 @@
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var navigationManager = NavigationManager.shared
     @State private var showToiletsMap = false
-    @State private var isMenuExpanded = false
     @State private var showBancsMap = false
     @State private var currentAQI = 3 // AQI de votre composant air quality
+ 
     
     var body: some View {
         ZStack {
@@ -44,11 +45,11 @@ struct ContentView: View {
             
             // Menu Bottom fixe
             FixedBottomMenuView(
-                isMenuExpanded: $isMenuExpanded,
-                showToiletsMap: $showToiletsMap,
-                showBancsMap: $showBancsMap,
+                isMenuExpanded: $navigationManager.isMenuExpanded,
+                showToiletsMap: .constant(false),
+                showBancsMap: .constant(false),
                 onHomeSelected: {
-                    print("Retour à l'accueil")
+                    print("Déjà sur l'accueil")
                 }
             )
         }
@@ -59,15 +60,11 @@ struct ContentView: View {
         .onChange(of: showToiletsMap) { newValue in
             print("🚽 ContentView - showToiletsMap changed to: \(newValue)")
         }
-        // ✅ CRUCIAL : Écoute des notifications de navigation entre pages
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToToilets"))) { _ in
-            print("🚽 Navigation vers toilettes demandée")
-            showToiletsMap = true
+        .onAppear {
+            navigationManager.currentDestination = "home"
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToBancs"))) { _ in
-            print("🪑 Navigation vers bancs demandée")
-            showBancsMap = true
-        }
+        // ✅ CRUCIAL : Écoute des notifications de nav
+       
     }
 }
 

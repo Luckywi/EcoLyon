@@ -194,6 +194,8 @@ struct MenuLayoutRedesigned: View {
     let onToiletsSelected: () -> Void
     let onBancsSelected: () -> Void // ✅ NOUVEAU: Action pour les bancs
     
+    @StateObject private var navigationManager = NavigationManager.shared
+    
     var body: some View {
         VStack(spacing: MenuDesignSystem.cardSpacing) {
             // LIGNE 1: Fontaines + Randos
@@ -208,7 +210,7 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.fontaineColor,
-                    action: { print("Fontaines d'Eau") }
+                    action: { navigationManager.navigateToFontaines() }
                 )
                 .frame(width: 100, height: 170)
                 
@@ -222,7 +224,7 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.randoColor,
-                    action: { print("Randos") }
+                    action: { navigationManager.navigateToRandos() }
                 )
                 .frame(height: 170)
             }
@@ -301,7 +303,7 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.bancsColor,
-                    action: onBancsSelected // ✅ NOUVEAU: Action de navigation
+                    action: { navigationManager.navigateToBancs() }
                 )
                 .frame(height: 155)
                 
@@ -315,7 +317,7 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.toilettesColor,
-                    action: onToiletsSelected
+                    action: { navigationManager.navigateToToilets() }
                 )
                 .frame(height: 155)
                 
