@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @State private var showToiletsMap = false
     @State private var isMenuExpanded = false
+    @State private var showBancsMap = false
     @State private var currentAQI = 3 // AQI de votre composant air quality
     
     var body: some View {
@@ -37,16 +38,35 @@ struct ContentView: View {
             .fullScreenCover(isPresented: $showToiletsMap) {
                 ToiletsMapView()
             }
+            .fullScreenCover(isPresented: $showBancsMap) { // ✅ AJOUTÉ : fullScreenCover pour les bancs
+                BancsMapView()
+            }
             
             // Menu Bottom fixe
             FixedBottomMenuView(
                 isMenuExpanded: $isMenuExpanded,
                 showToiletsMap: $showToiletsMap,
+                showBancsMap: $showBancsMap,
                 onHomeSelected: {
-                    // Action pour retourner en haut ou rafraîchir
                     print("Retour à l'accueil")
                 }
             )
+        }
+        // ✅ AJOUTÉ : Debug pour voir les changements d'état
+        .onChange(of: showBancsMap) { newValue in
+            print("🪑 ContentView - showBancsMap changed to: \(newValue)")
+        }
+        .onChange(of: showToiletsMap) { newValue in
+            print("🚽 ContentView - showToiletsMap changed to: \(newValue)")
+        }
+        // ✅ CRUCIAL : Écoute des notifications de navigation entre pages
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToToilets"))) { _ in
+            print("🚽 Navigation vers toilettes demandée")
+            showToiletsMap = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToBancs"))) { _ in
+            print("🪑 Navigation vers bancs demandée")
+            showBancsMap = true
         }
     }
 }

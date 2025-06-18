@@ -2,10 +2,10 @@ import SwiftUI
 import MapKit
 import Foundation
 
-// MARK: - ToiletsMapView avec structure identique à ContentView
-struct ToiletsMapView: View {
+// MARK: - BancsMapView avec structure identique à ContentView
+struct BancsMapView: View {
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var toiletService = ToiletAPIService()
+    @StateObject private var bancService = BancAPIService()
     @StateObject private var locationService = GlobalLocationService.shared
     
     // États pour le menu
@@ -19,24 +19,23 @@ struct ToiletsMapView: View {
     @State private var addressSuggestions: [AddressSuggestion] = []
     @State private var showSuggestions = false
     @State private var searchedLocation: CLLocationCoordinate2D?
-
     
     // ✅ COULEUR UNIFIÉE
-    private let toiletThemeColor = Color(red: 0.7, green: 0.7, blue: 0.7)
+    private let bancThemeColor = Color(red: 0.7, green: 0.5, blue: 0.4)
     
-    // ✅ Computed property pour les 3 toilettes les plus proches
-    private var nearestToilets: [ToiletLocation] {
+    // ✅ Computed property pour les 3 bancs les plus proches
+    private var nearestBancs: [BancLocation] {
         guard let userLocation = locationService.userLocation else { return [] }
         
-        return toiletService.toilets
-            .map { toilet in
+        return bancService.bancs
+            .map { banc in
                 let distance = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
-                    .distance(from: CLLocation(latitude: toilet.coordinate.latitude, longitude: toilet.coordinate.longitude))
-                return (toilet: toilet, distance: distance)
+                    .distance(from: CLLocation(latitude: banc.coordinate.latitude, longitude: banc.coordinate.longitude))
+                return (banc: banc, distance: distance)
             }
             .sorted { $0.distance < $1.distance }
             .prefix(3)
-            .map { $0.toilet }
+            .map { $0.banc }
     }
     
     // ✅ Initializer personnalisé
@@ -44,10 +43,10 @@ struct ToiletsMapView: View {
         let initialCenter: CLLocationCoordinate2D
         if let userLocation = GlobalLocationService.shared.userLocation {
             initialCenter = userLocation
-            print("🎯 Toilettes: Initialisation avec position utilisateur")
+            print("🎯 Bancs: Initialisation avec position utilisateur")
         } else {
             initialCenter = CLLocationCoordinate2D(latitude: 45.7640, longitude: 4.8357)
-            print("🏛️ Toilettes: Initialisation avec Bellecour (fallback)")
+            print("🏛️ Bancs: Initialisation avec Bellecour (fallback)")
         }
         
         _region = State(initialValue: MKCoordinateRegion(
@@ -64,13 +63,13 @@ struct ToiletsMapView: View {
                 VStack(spacing: 0) {
                     // ✅ TITRE FIXE EN HAUT
                     HStack(spacing: 12) {
-                        Image("Wc")
+                        Image("Banc")
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 50, height: 50)
-                            .foregroundColor(toiletThemeColor)
+                            .foregroundColor(bancThemeColor)
                         
-                        Text("Toilettes Publiques")
+                        Text("Bancs Publics")
                             .font(.system(size: 24, weight: .bold))
                             .foregroundColor(.primary)
                         
@@ -82,18 +81,18 @@ struct ToiletsMapView: View {
                     
                     // ✅ Barre de recherche
                     VStack(spacing: 0) {
-                        SmartSearchBarView(
+                        BancSmartSearchBarView(
                             searchText: $searchText,
                             suggestions: addressSuggestions,
                             showSuggestions: $showSuggestions,
                             onSearchTextChanged: handleSearchTextChange,
                             onSuggestionTapped: handleSuggestionTap,
                             onSearchSubmitted: handleSearchSubmitted,
-                            themeColor: toiletThemeColor
+                            themeColor: bancThemeColor
                         )
                         
                         if showSuggestions && !addressSuggestions.isEmpty {
-                            SuggestionsListView(
+                            BancSuggestionsListView(
                                 suggestions: addressSuggestions,
                                 onSuggestionTapped: handleSuggestionTap
                             )
@@ -103,23 +102,23 @@ struct ToiletsMapView: View {
                     .padding(.bottom, 16)
                     
                     // ✅ Carte
-                    MapBoxView(
+                    BancMapBoxView(
                         region: $region,
-                        toilets: toiletService.toilets,
+                        bancs: bancService.bancs,
                         userLocation: locationService.userLocation,
                         searchedLocation: searchedLocation,
-                        isLoading: toiletService.isLoading,
-                        themeColor: toiletThemeColor
+                        isLoading: bancService.isLoading,
+                        themeColor: bancThemeColor
                     )
                     .padding(.horizontal)
                     .padding(.bottom, 16)
                     
-                    // ✅ Section des 3 toilettes les plus proches
-                    if !nearestToilets.isEmpty && locationService.userLocation != nil {
-                        NearestToiletsView(
-                            toilets: nearestToilets,
+                    // ✅ Section des 3 bancs les plus proches
+                    if !nearestBancs.isEmpty && locationService.userLocation != nil {
+                        NearestBancsView(
+                            bancs: nearestBancs,
                             userLocation: locationService.userLocation!,
-                            themeColor: toiletThemeColor
+                            themeColor: bancThemeColor
                         )
                         .padding(.horizontal)
                         .padding(.bottom, 30)
@@ -131,7 +130,7 @@ struct ToiletsMapView: View {
             }
             .background(Color(red: 248/255, green: 247/255, blue: 244/255))
             .refreshable {
-                await toiletService.loadToilets()
+                await bancService.loadBancs()
             }
             
             // ✅ MENU DIRECTEMENT DANS LE ZSTACK - COMME CONTENTVIEW
@@ -142,12 +141,12 @@ struct ToiletsMapView: View {
                 onHomeSelected: {
                     dismiss()
                 },
-                themeColor: Color(red: 0.7, green: 0.7, blue: 0.7) // ✅ Couleur toilettes
+                themeColor: Color(red: 0.7, green: 0.5, blue: 0.4) // ✅ Couleur bancs
             )
         }
         .onAppear {
             setupInitialLocation()
-            loadToilets()
+            loadBancs()
         }
         .onDisappear {
             locationService.stopLocationUpdates()
@@ -155,31 +154,31 @@ struct ToiletsMapView: View {
         .onChange(of: locationService.isLocationReady) { isReady in
             if isReady, let location = locationService.userLocation {
                 centerMapOnLocation(location)
-                print("📍 Toilettes: Position mise à jour automatiquement")
+                print("📍 Bancs: Position mise à jour automatiquement")
             }
         }
-        .onChange(of: showBancsMap) { newValue in
-               if newValue {
-                   dismiss() // Ferme d'abord la page toilettes
-                   
-                   // Puis ouvre les bancs après un délai
-                   DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                       NotificationCenter.default.post(
-                           name: NSNotification.Name("NavigateToBancs"),
-                           object: nil
-                       )
-                   }
-               }
-           }
-        .overlay {
-            if toiletService.isLoading && toiletService.toilets.isEmpty {
-                LoadingOverlayView(themeColor: toiletThemeColor)
+        .onChange(of: showToiletsMap) { newValue in
+            if newValue {
+                dismiss() // Ferme d'abord la page bancs
+                
+                // Puis ouvre les toilettes après un délai
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("NavigateToToilets"),
+                        object: nil
+                    )
+                }
             }
         }
         .overlay {
-            if let errorMessage = toiletService.errorMessage {
-                ErrorOverlayView(message: errorMessage, themeColor: toiletThemeColor) {
-                    loadToilets()
+            if bancService.isLoading && bancService.bancs.isEmpty {
+                BancLoadingOverlayView(themeColor: bancThemeColor)
+            }
+        }
+        .overlay {
+            if let errorMessage = bancService.errorMessage {
+                BancErrorOverlayView(message: errorMessage, themeColor: bancThemeColor) {
+                    loadBancs()
                 }
             }
         }
@@ -188,7 +187,7 @@ struct ToiletsMapView: View {
     // MARK: - Fonctions optimisées (inchangées)
     
     private func setupInitialLocation() {
-        print("🗺️ Setup initial - toilettes")
+        print("🗺️ Setup initial - bancs")
         
         if locationService.userLocation == nil {
             print("🔄 Position pas encore disponible, refresh en cours...")
@@ -198,9 +197,9 @@ struct ToiletsMapView: View {
         }
     }
     
-    private func loadToilets() {
+    private func loadBancs() {
         Task {
-            await toiletService.loadToilets()
+            await bancService.loadBancs()
         }
     }
     
@@ -359,25 +358,11 @@ struct ToiletsMapView: View {
     }
 }
 
-// MARK: - Modèles nécessaires (inchangés)
-struct AddressSuggestion: Identifiable, Hashable {
-    let id = UUID()
-    let title: String
-    let subtitle: String
-    let coordinate: CLLocationCoordinate2D
-    
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-    
-    static func == (lhs: AddressSuggestion, rhs: AddressSuggestion) -> Bool {
-        lhs.id == rhs.id
-    }
-}
+// MARK: - Modèles nécessaires (utilise ceux de ToiletsMapView pour éviter les conflits)
 
-// MARK: - ✅ NOUVELLE SECTION - Toilettes les plus proches
-struct NearestToiletsView: View {
-    let toilets: [ToiletLocation]
+// MARK: - ✅ NOUVELLE SECTION - Bancs les plus proches
+struct NearestBancsView: View {
+    let bancs: [BancLocation]
     let userLocation: CLLocationCoordinate2D
     let themeColor: Color
     
@@ -385,7 +370,7 @@ struct NearestToiletsView: View {
         VStack(alignment: .leading, spacing: 12) {
             // En-tête SANS ICÔNE
             HStack {
-                Text("Toilettes les plus proches")
+                Text("Bancs les plus proches")
                     .font(.headline)
                     .foregroundColor(.primary)
                 
@@ -394,11 +379,11 @@ struct NearestToiletsView: View {
             .padding(.horizontal)
             .padding(.top)
             
-            // Liste des 3 toilettes
+            // Liste des 3 bancs
             VStack(spacing: 8) {
-                ForEach(toilets) { toilet in
-                    NearestToiletRowView(
-                        toilet: toilet,
+                ForEach(bancs) { banc in
+                    NearestBancRowView(
+                        banc: banc,
                         userLocation: userLocation,
                         themeColor: themeColor
                     )
@@ -413,16 +398,16 @@ struct NearestToiletsView: View {
     }
 }
 
-struct NearestToiletRowView: View {
-    let toilet: ToiletLocation
+struct NearestBancRowView: View {
+    let banc: BancLocation
     let userLocation: CLLocationCoordinate2D
     let themeColor: Color
     @State private var showNavigationAlert = false
     
     private var distance: String {
         let userCLLocation = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
-        let toiletLocation = CLLocation(latitude: toilet.coordinate.latitude, longitude: toilet.coordinate.longitude)
-        let distanceInMeters = userCLLocation.distance(from: toiletLocation)
+        let bancLocation = CLLocation(latitude: banc.coordinate.latitude, longitude: banc.coordinate.longitude)
+        let distanceInMeters = userCLLocation.distance(from: bancLocation)
         
         if distanceInMeters < 1000 {
             return "\(Int(distanceInMeters))m"
@@ -436,16 +421,16 @@ struct NearestToiletRowView: View {
             showNavigationAlert = true
         }) {
             HStack(spacing: 12) {
-                // Icône WC AGRANDIE x2 (48px au lieu de 24px)
-                Image("Wc")
+                // Icône Banc AGRANDIE x2 (48px au lieu de 24px)
+                Image("Banc")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 48, height: 48)
-                    .foregroundColor(toilet.isOpen ? themeColor : themeColor.opacity(0.5))
+                    .foregroundColor(themeColor)
                 
-                // Informations toilette - UNIQUEMENT L'ADRESSE
+                // Informations banc - UNIQUEMENT L'ADRESSE
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(toilet.address)
+                    Text(banc.address)
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
@@ -454,7 +439,7 @@ struct NearestToiletRowView: View {
                     
                     // Badges statut
                     HStack(spacing: 8) {
-                        if toilet.isAccessible {
+                        if banc.isAccessible {
                             Text("♿ Accessible")
                                 .font(.caption2)
                                 .padding(.horizontal, 6)
@@ -464,13 +449,13 @@ struct NearestToiletRowView: View {
                                 .cornerRadius(4)
                         }
                         
-                        if !toilet.isOpen {
-                            Text("🔒 Fermé")
+                        if banc.hasShadow {
+                            Text("🌳 Ombragé")
                                 .font(.caption2)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 2)
-                                .background(Color.red.opacity(0.2))
-                                .foregroundColor(.red)
+                                .background(Color.blue.opacity(0.2))
+                                .foregroundColor(.blue)
                                 .cornerRadius(4)
                         }
                     }
@@ -499,20 +484,20 @@ struct NearestToiletRowView: View {
         .cornerRadius(12)
         .alert("Navigation", isPresented: $showNavigationAlert) {
             Button("Ouvrir dans Plans") {
-                openNavigationToToilet()
+                openNavigationToBanc()
             }
             Button("Annuler", role: .cancel) { }
         } message: {
-            Text("Voulez-vous ouvrir la navigation vers cette toilette ?")
+            Text("Voulez-vous ouvrir la navigation vers ce banc ?")
         }
     }
     
-    private func openNavigationToToilet() {
-        let coordinate = toilet.coordinate
+    private func openNavigationToBanc() {
+        let coordinate = banc.coordinate
         let placemark = MKPlacemark(coordinate: coordinate)
         let mapItem = MKMapItem(placemark: placemark)
         
-        mapItem.name = toilet.address // Utilise l'adresse comme nom
+        mapItem.name = banc.address // Utilise l'adresse comme nom
         
         let launchOptions: [String: Any] = [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking,
@@ -521,27 +506,27 @@ struct NearestToiletRowView: View {
         
         mapItem.openInMaps(launchOptions: launchOptions)
         
-        print("🧭 Navigation à pied lancée vers: \(toilet.address) (\(coordinate.latitude), \(coordinate.longitude))")
+        print("🧭 Navigation à pied lancée vers: \(banc.address) (\(coordinate.latitude), \(coordinate.longitude))")
     }
 }
 
 // MARK: - Composants UI avec couleur uniforme
 
-struct MapBoxView: View {
+struct BancMapBoxView: View {
     @Binding var region: MKCoordinateRegion
-    let toilets: [ToiletLocation]
+    let bancs: [BancLocation]
     let userLocation: CLLocationCoordinate2D?
     let searchedLocation: CLLocationCoordinate2D?
     let isLoading: Bool
     let themeColor: Color
     
-    private var stableAnnotations: [MapAnnotationItem] {
-        var annotations = toilets.map { toilet in
-            MapAnnotationItem(toilet: toilet, coordinate: toilet.coordinate, isSearchResult: false)
+    private var stableAnnotations: [BancMapAnnotationItem] {
+        var annotations = bancs.map { banc in
+            BancMapAnnotationItem(banc: banc, coordinate: banc.coordinate, isSearchResult: false)
         }
         
         if let searchedLocation = searchedLocation {
-            annotations.append(MapAnnotationItem(toilet: nil, coordinate: searchedLocation, isSearchResult: true))
+            annotations.append(BancMapAnnotationItem(banc: nil, coordinate: searchedLocation, isSearchResult: true))
         }
         
         return annotations
@@ -549,9 +534,9 @@ struct MapBoxView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // ✅ En-tête avec nombre de toilettes et bouton "Ma position"
+            // ✅ En-tête avec nombre de bancs et bouton "Ma position"
             HStack {
-                Text("Carte des toilettes (\(toilets.count))")
+                Text("Carte des bancs (\(bancs.count))")
                     .font(.headline)
                     .foregroundColor(.primary)
                 
@@ -596,17 +581,17 @@ struct MapBoxView: View {
             .padding()
             .background(themeColor.opacity(0.2))
             
-            // ✅ Map avec icônes WC personnalisées
+            // ✅ Map avec icônes Banc personnalisées
             Map(coordinateRegion: $region,
                 interactionModes: [.pan, .zoom],
                 showsUserLocation: true,
                 annotationItems: stableAnnotations) { annotation in
                 MapAnnotation(coordinate: annotation.coordinate) {
-                    if let toilet = annotation.toilet {
-                        ToiletWcMarkerView(toilet: toilet, themeColor: themeColor)
-                            .id("toilet-\(toilet.id)")
+                    if let banc = annotation.banc {
+                        BancMarkerView(banc: banc, themeColor: themeColor)
+                            .id("banc-\(banc.id)")
                     } else if annotation.isSearchResult {
-                        SearchPinMarker()
+                        BancSearchPinMarker()
                             .id("search-pin")
                     }
                 }
@@ -639,15 +624,15 @@ struct MapBoxView: View {
     }
 }
 
-struct MapAnnotationItem: Identifiable {
+struct BancMapAnnotationItem: Identifiable {
     let id = UUID()
-    let toilet: ToiletLocation?
+    let banc: BancLocation?
     let coordinate: CLLocationCoordinate2D
     let isSearchResult: Bool
     
     var stableId: String {
-        if let toilet = toilet {
-            return "toilet-\(toilet.id)"
+        if let banc = banc {
+            return "banc-\(banc.id)"
         } else if isSearchResult {
             return "search-pin"
         } else {
@@ -656,7 +641,9 @@ struct MapAnnotationItem: Identifiable {
     }
 }
 
-struct SmartSearchBarView: View {
+// MARK: - Composants UI spécifiques aux bancs (évite les conflits avec ToiletsMapView)
+
+struct BancSmartSearchBarView: View {
     @Binding var searchText: String
     let suggestions: [AddressSuggestion]
     @Binding var showSuggestions: Bool
@@ -711,7 +698,7 @@ struct SmartSearchBarView: View {
     }
 }
 
-struct SuggestionsListView: View {
+struct BancSuggestionsListView: View {
     let suggestions: [AddressSuggestion]
     let onSuggestionTapped: (AddressSuggestion) -> Void
     
@@ -750,7 +737,7 @@ struct SuggestionsListView: View {
     }
 }
 
-struct ToiletStatsView: View {
+struct BancStatsView: View {
     let count: Int
     let userLocation: CLLocationCoordinate2D?
     let onLocationTap: () -> Void
@@ -758,15 +745,15 @@ struct ToiletStatsView: View {
     
     var body: some View {
         HStack {
-            // ✅ Icône WC + couleur unifiée pour le nombre
+            // ✅ Icône Banc + couleur unifiée pour le nombre
             HStack(spacing: 8) {
-                Image("Wc")
+                Image("Banc")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 24, height: 24)
                     .foregroundColor(themeColor)
                 
-                Text("\(count) toilettes")
+                Text("\(count) bancs")
                     .foregroundColor(themeColor)
                     .font(.headline)
                     .fontWeight(.semibold)
@@ -811,7 +798,7 @@ struct ToiletStatsView: View {
     }
 }
 
-struct LoadingStatsView: View {
+struct BancLoadingStatsView: View {
     let themeColor: Color
     
     var body: some View {
@@ -819,7 +806,7 @@ struct LoadingStatsView: View {
             ProgressView()
                 .scaleEffect(0.8)
                 .tint(themeColor)
-            Text("Chargement des toilettes...")
+            Text("Chargement des bancs...")
                 .font(.caption)
                 .foregroundColor(themeColor)
             
@@ -836,7 +823,7 @@ struct LoadingStatsView: View {
     }
 }
 
-struct LoadingOverlayView: View {
+struct BancLoadingOverlayView: View {
     let themeColor: Color
     
     var body: some View {
@@ -849,7 +836,7 @@ struct LoadingOverlayView: View {
                     .scaleEffect(1.5)
                     .tint(themeColor)
                 
-                Text("Chargement des toilettes...")
+                Text("Chargement des bancs...")
                     .font(.headline)
                     .foregroundColor(.primary)
             }
@@ -865,7 +852,7 @@ struct LoadingOverlayView: View {
     }
 }
 
-struct ErrorOverlayView: View {
+struct BancErrorOverlayView: View {
     let message: String
     let themeColor: Color
     let onRetry: () -> Void
@@ -910,8 +897,8 @@ struct ErrorOverlayView: View {
 }
 
 // ✅ MARQUEUR MODIFIÉ - ICÔNE SEULE SANS BACKGROUND
-struct ToiletWcMarkerView: View {
-    let toilet: ToiletLocation
+struct BancMarkerView: View {
+    let banc: BancLocation
     let themeColor: Color
     @State private var showNavigationAlert = false
     
@@ -921,24 +908,24 @@ struct ToiletWcMarkerView: View {
         }) {
             ZStack {
                 // ✅ PLUS DE BACKGROUND CIRCULAIRE - JUSTE L'ICÔNE
-                Image("Wc")
+                Image("Banc")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 28, height: 28)
-                    .foregroundColor(toilet.isOpen ? themeColor : themeColor.opacity(0.5))
+                    .foregroundColor(themeColor)
                     .shadow(color: .black.opacity(0.3), radius: 2, x: 1, y: 1) // Ombre pour la visibilité
                 
                 // Bordure verte si accessible (autour de l'icône)
-                if toilet.isAccessible {
+                if banc.isAccessible {
                     RoundedRectangle(cornerRadius: 4)
                         .stroke(Color.green, lineWidth: 2)
                         .frame(width: 32, height: 32)
                 }
                 
-                // Bordure rouge si fermé (autour de l'icône)
-                if !toilet.isOpen {
+                // Bordure bleue si ombragé (autour de l'icône)
+                if banc.hasShadow {
                     RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.red, lineWidth: 2)
+                        .stroke(Color.blue, lineWidth: 2)
                         .frame(width: 34, height: 34)
                 }
             }
@@ -949,16 +936,16 @@ struct ToiletWcMarkerView: View {
             }
             Button("Annuler", role: .cancel) { }
         } message: {
-            Text("Voulez-vous ouvrir la navigation vers \(toilet.name) ?")
+            Text("Voulez-vous ouvrir la navigation vers \(banc.name) ?")
         }
     }
     
     private func openInMaps() {
-        let coordinate = toilet.coordinate
+        let coordinate = banc.coordinate
         let placemark = MKPlacemark(coordinate: coordinate)
         let mapItem = MKMapItem(placemark: placemark)
         
-        mapItem.name = toilet.name
+        mapItem.name = banc.name
         mapItem.phoneNumber = nil
         
         let launchOptions: [String: Any] = [
@@ -968,11 +955,11 @@ struct ToiletWcMarkerView: View {
         
         mapItem.openInMaps(launchOptions: launchOptions)
         
-        print("🧭 Navigation lancée vers: \(toilet.name) (\(coordinate.latitude), \(coordinate.longitude))")
+        print("🧭 Navigation lancée vers: \(banc.name) (\(coordinate.latitude), \(coordinate.longitude))")
     }
 }
 
-struct SearchPinMarker: View {
+struct BancSearchPinMarker: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
@@ -1006,53 +993,53 @@ struct SearchPinMarker: View {
 // MARK: - Service API et modèles (inchangés)
 
 @MainActor
-class ToiletAPIService: ObservableObject {
-    @Published var toilets: [ToiletLocation] = []
+class BancAPIService: ObservableObject {
+    @Published var bancs: [BancLocation] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     
-    private let apiURL = "https://data.grandlyon.com/geoserver/metropole-de-lyon/ows?SERVICE=WFS&VERSION=2.0.0&request=GetFeature&typename=metropole-de-lyon:adr_voie_lieu.adrtoilettepublique_latest&SRSNAME=EPSG:4171&outputFormat=application/json&startIndex=0&sortby=gid"
+    private let apiURL = "https://data.grandlyon.com/geoserver/metropole-de-lyon/ows?SERVICE=WFS&VERSION=2.0.0&request=GetFeature&typename=metropole-de-lyon:adr_voie_lieu.adrbanc_latest&outputFormat=application/json&SRSNAME=EPSG:4171&startIndex=0&sortby=gid"
     
-    func loadToilets() async {
+    func loadBancs() async {
         isLoading = true
         errorMessage = nil
         
         do {
             guard let url = URL(string: apiURL) else {
-                throw ToiletAPIError.invalidURL
+                throw BancAPIError.invalidURL
             }
             
             let (data, response) = try await URLSession.shared.data(from: url)
             
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw ToiletAPIError.invalidResponse
+                throw BancAPIError.invalidResponse
             }
             
             guard httpResponse.statusCode == 200 else {
-                throw ToiletAPIError.httpError(httpResponse.statusCode)
+                throw BancAPIError.httpError(httpResponse.statusCode)
             }
             
-            let geoJsonResponse = try JSONDecoder().decode(ToiletGeoJSONResponse.self, from: data)
+            let geoJsonResponse = try JSONDecoder().decode(BancGeoJSONResponse.self, from: data)
             
-            let toiletLocations = geoJsonResponse.features.compactMap { feature -> ToiletLocation? in
+            let bancLocations = geoJsonResponse.features.compactMap { feature -> BancLocation? in
                 guard feature.geometry.coordinates.count >= 2 else { return nil }
                 
                 let longitude = feature.geometry.coordinates[0]
                 let latitude = feature.geometry.coordinates[1]
                 let props = feature.properties
                 
-                return ToiletLocation(
+                return BancLocation(
                     coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
-                    name: props.nom ?? "Toilette publique",
+                    name: props.nom ?? "Banc public",
                     address: formatAddress(props),
                     gestionnaire: props.gestionnaire ?? "Non spécifié",
                     isAccessible: props.acces_pmr == "Oui",
-                    isOpen: determineOpenStatus(props),
-                    horaires: props.horaires
+                    hasShadow: props.ombrage == "Oui",
+                    materiau: props.materiau
                 )
             }
             
-            toilets = toiletLocations
+            bancs = bancLocations
             isLoading = false
             
         } catch {
@@ -1061,7 +1048,7 @@ class ToiletAPIService: ObservableObject {
         }
     }
     
-    private func formatAddress(_ props: ToiletProperties) -> String {
+    private func formatAddress(_ props: BancProperties) -> String {
         var addressParts: [String] = []
         
         if let adresse = props.adresse {
@@ -1078,41 +1065,37 @@ class ToiletAPIService: ObservableObject {
         
         return addressParts.isEmpty ? "Adresse non disponible" : addressParts.joined(separator: ", ")
     }
-    
-    private func determineOpenStatus(_ props: ToiletProperties) -> Bool {
-        return true
-    }
 }
 
-struct ToiletLocation: Identifiable {
+struct BancLocation: Identifiable {
     let id = UUID()
     let coordinate: CLLocationCoordinate2D
     let name: String
     let address: String
     let gestionnaire: String
     let isAccessible: Bool
-    let isOpen: Bool
-    let horaires: String?
+    let hasShadow: Bool
+    let materiau: String?
 }
 
-struct ToiletGeoJSONResponse: Codable {
+struct BancGeoJSONResponse: Codable {
     let type: String
-    let features: [ToiletFeature]
+    let features: [BancFeature]
     let totalFeatures: Int?
 }
 
-struct ToiletFeature: Codable {
+struct BancFeature: Codable {
     let type: String
-    let geometry: ToiletGeometry
-    let properties: ToiletProperties
+    let geometry: BancGeometry
+    let properties: BancProperties
 }
 
-struct ToiletGeometry: Codable {
+struct BancGeometry: Codable {
     let type: String
     let coordinates: [Double]
 }
 
-struct ToiletProperties: Codable {
+struct BancProperties: Codable {
     let gid: Int?
     let nom: String?
     let adresse: String?
@@ -1120,10 +1103,11 @@ struct ToiletProperties: Codable {
     let commune: String?
     let gestionnaire: String?
     let acces_pmr: String?
-    let horaires: String?
+    let ombrage: String?
+    let materiau: String?
 }
 
-enum ToiletAPIError: Error, LocalizedError {
+enum BancAPIError: Error, LocalizedError {
     case invalidURL
     case invalidResponse
     case httpError(Int)
@@ -1141,5 +1125,5 @@ enum ToiletAPIError: Error, LocalizedError {
 }
 
 #Preview {
-    ToiletsMapView()
+    BancsMapView()
 }

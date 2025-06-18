@@ -1,0 +1,23 @@
+{
+  "images" : [
+    {
+      "filename" : "20250612_1027_Texte Supprimé_remix_01jxhkxkmyf9qsxs855nsx7s59 (1).png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "20250612_1027_Texte Supprimé_remix_01jxhkxkmyf9qsxs855nsx7s59 (1) 1.png",
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "filename" : "20250612_1027_Texte Supprimé_remix_01jxhkxkmyf9qsxs855nsx7s59 (1) 2.png",
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

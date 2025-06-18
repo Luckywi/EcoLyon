@@ -1,0 +1,23 @@
+{
+  "images" : [
+    {
+      "filename" : "20250612_1209_Urban Nature Trail_simple_compose_01jxhsr4bpegga2fa9ahymp4xw.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "20250612_1209_Urban Nature Trail_simple_compose_01jxhsr4bpegga2fa9ahymp4xw 1.png",
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "filename" : "20250612_1209_Urban Nature Trail_simple_compose_01jxhsr4bpegga2fa9ahymp4xw 2.png",
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
