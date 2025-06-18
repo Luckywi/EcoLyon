@@ -4,7 +4,6 @@ import Foundation
 
 // MARK: - BancsMapView avec structure identique à ContentView
 struct BancsMapView: View {
-    @Environment(\.dismiss) private var dismiss
     @StateObject private var bancService = BancAPIService()
     @StateObject private var locationService = GlobalLocationService.shared
     @StateObject private var navigationManager = NavigationManager.shared
@@ -132,41 +131,38 @@ struct BancsMapView: View {
             // ✅ MENU DIRECTEMENT DANS LE ZSTACK - COMME CONTENTVIEW
             FixedBottomMenuView(
                 isMenuExpanded: $navigationManager.isMenuExpanded,
-                showToiletsMap: .constant(false),
-                showBancsMap: .constant(false),
-                onHomeSelected: { dismiss() },
+                showToiletsMap: $navigationManager.showToiletsMap,  // ✅ CORRIGÉ
+                showBancsMap: $navigationManager.showBancsMap,      // ✅ CORRIGÉ
+                onHomeSelected: {
+                    navigationManager.navigateToHome()              // ✅ CORRIGÉ
+                },
                 themeColor: Color(red: 0.7, green: 0.5, blue: 0.4)
             )
-        }
-        .onAppear {
-            navigationManager.currentDestination = "bancs"
-            setupInitialLocation()
-            loadBancs()
-        }
-        .onDisappear {
-            locationService.stopLocationUpdates()
-        }
-        .onChange(of: locationService.isLocationReady) { isReady in
-            if isReady, let location = locationService.userLocation {
-                centerMapOnLocation(location)
-                print("📍 Bancs: Position mise à jour automatiquement")
+            .onAppear {
+                navigationManager.currentDestination = "bancs"
+                setupInitialLocation()
+                loadBancs()
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToToilets"))) { _ in
-            dismiss()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToHome"))) { _ in
-            dismiss()
-        }
-        .overlay {
-            if bancService.isLoading && bancService.bancs.isEmpty {
-                BancLoadingOverlayView(themeColor: bancThemeColor)
+            .onDisappear {
+                locationService.stopLocationUpdates()
             }
-        }
-        .overlay {
-            if let errorMessage = bancService.errorMessage {
-                BancErrorOverlayView(message: errorMessage, themeColor: bancThemeColor) {
-                    loadBancs()
+            .onChange(of: locationService.isLocationReady) { isReady in
+                if isReady, let location = locationService.userLocation {
+                    centerMapOnLocation(location)
+                    print("📍 Bancs: Position mise à jour automatiquement")
+                }
+            }
+            
+            .overlay {
+                if bancService.isLoading && bancService.bancs.isEmpty {
+                    BancLoadingOverlayView(themeColor: bancThemeColor)
+                }
+            }
+            .overlay {
+                if let errorMessage = bancService.errorMessage {
+                    BancErrorOverlayView(message: errorMessage, themeColor: bancThemeColor) {
+                        loadBancs()
+                    }
                 }
             }
         }
@@ -584,11 +580,7 @@ struct BancMapBoxView: View {
                     }
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    region.span = MKCoordinateSpan(latitudeDelta: 0.009, longitudeDelta: 0.009)
-                }
-            }
+        
             .frame(height: 350) // ✅ Réduit la hauteur pour faire de la place
         }
         .background(Color(.systemBackground))

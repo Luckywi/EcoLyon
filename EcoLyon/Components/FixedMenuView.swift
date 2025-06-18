@@ -34,24 +34,22 @@ struct MenuDesignSystem {
 struct FixedBottomMenuView: View {
     @Binding var isMenuExpanded: Bool
     @Binding var showToiletsMap: Bool
-    @Binding var showBancsMap: Bool // ✅ NOUVEAU: Binding pour les bancs
+    @Binding var showBancsMap: Bool
     let onHomeSelected: () -> Void
     
-    // ✅ NOUVEAU PARAMÈTRE POUR LE THÈME
+    // Paramètre pour le thème
     let themeColor: Color?
     
     // Hauteur du bouton menu + padding pour le background
     private let menuButtonHeight: CGFloat = 56
     private let backgroundExtraHeight: CGFloat = 56
     
-    // ✅ Computed properties pour les couleurs selon le thème
+    // Computed properties pour les couleurs selon le thème
     private var backgroundColorClosed: Color {
-        // ✅ TOUJOURS la même couleur pour le background fermé
         MenuDesignSystem.defaultBackgroundColor
     }
     
     private var backgroundColorOpen: Color {
-        // ✅ Couleur du thème seulement pour le background ouvert
         themeColor ?? MenuDesignSystem.defaultBackgroundColor
     }
     
@@ -67,17 +65,17 @@ struct FixedBottomMenuView: View {
         }
     }
     
-    // ✅ Initializer avec themeColor optionnel ET showBancsMap
+    // Initializer
     init(
         isMenuExpanded: Binding<Bool>,
         showToiletsMap: Binding<Bool>,
-        showBancsMap: Binding<Bool>, // ✅ NOUVEAU
+        showBancsMap: Binding<Bool>,
         onHomeSelected: @escaping () -> Void,
         themeColor: Color? = nil
     ) {
         self._isMenuExpanded = isMenuExpanded
         self._showToiletsMap = showToiletsMap
-        self._showBancsMap = showBancsMap // ✅ NOUVEAU
+        self._showBancsMap = showBancsMap
         self.onHomeSelected = onHomeSelected
         self.themeColor = themeColor
     }
@@ -88,11 +86,11 @@ struct FixedBottomMenuView: View {
                 // Arrière-plan complet - adapté au thème
                 if isMenuExpanded {
                     ZStack {
-                        // ✅ 1. Base avec couleur du thème pour le menu ouvert
+                        // Base avec couleur du thème pour le menu ouvert
                         backgroundColorOpen
                             .ignoresSafeArea(.all)
                         
-                        // ✅ 2. Overlay avec couleur du thème
+                        // Overlay avec couleur du thème
                         overlayColor
                             .ignoresSafeArea(.all)
                     }
@@ -109,7 +107,7 @@ struct FixedBottomMenuView: View {
                     VStack {
                         Spacer()
                         Rectangle()
-                            .fill(backgroundColorClosed) // ✅ TOUJOURS la même couleur
+                            .fill(backgroundColorClosed)
                             .frame(height: menuButtonHeight + backgroundExtraHeight)
                     }
                     .ignoresSafeArea(edges: .bottom)
@@ -126,21 +124,9 @@ struct FixedBottomMenuView: View {
                                 .padding(.top, 12)
                                 .padding(.bottom, 20)
                             
-                            // Layout du menu selon la maquette
+                            // ✅ Layout du menu SIMPLIFIÉ
                             MenuLayoutRedesigned(
-                                onHomeSelected: onHomeSelected,
-                                onToiletsSelected: {
-                                    showToiletsMap = true
-                                    withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                                        isMenuExpanded = false
-                                    }
-                                },
-                                onBancsSelected: { // ✅ NOUVEAU: Action pour les bancs
-                                    showBancsMap = true
-                                    withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                                        isMenuExpanded = false
-                                    }
-                                }
+                                onHomeSelected: onHomeSelected
                             )
                             .padding(.horizontal, MenuDesignSystem.containerPadding)
                             .padding(.bottom, 20)
@@ -148,7 +134,7 @@ struct FixedBottomMenuView: View {
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
                     
-                    // ✅ Onglet du menu avec couleur adaptée au thème
+                    // Onglet du menu avec couleur adaptée au thème
                     Button(action: {
                         withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                             isMenuExpanded.toggle()
@@ -170,7 +156,7 @@ struct FixedBottomMenuView: View {
                         .padding(.vertical, 18)
                         .background(
                             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(isMenuExpanded ? Color.clear : menuButtonColor) // ✅ Couleur selon le thème
+                                .fill(isMenuExpanded ? Color.clear : menuButtonColor)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 20, style: .continuous)
                                         .stroke(.white.opacity(isMenuExpanded ? 0.0 : 0.2), lineWidth: 1)
@@ -188,11 +174,9 @@ struct FixedBottomMenuView: View {
     }
 }
 
-// MARK: - Layout redesigné selon la maquette
+// MARK: - Layout redesigné selon la maquette - CORRIGÉ
 struct MenuLayoutRedesigned: View {
     let onHomeSelected: () -> Void
-    let onToiletsSelected: () -> Void
-    let onBancsSelected: () -> Void // ✅ NOUVEAU: Action pour les bancs
     
     @StateObject private var navigationManager = NavigationManager.shared
     
@@ -210,7 +194,9 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.fontaineColor,
-                    action: { navigationManager.navigateToFontaines() }
+                    action: {
+                        navigationManager.navigateToFontaines()
+                    }
                 )
                 .frame(width: 100, height: 170)
                 
@@ -224,7 +210,9 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.randoColor,
-                    action: { navigationManager.navigateToRandos() }
+                    action: {
+                        navigationManager.navigateToRandos()
+                    }
                 )
                 .frame(height: 170)
             }
@@ -241,7 +229,7 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.poubelleColor,
-                    action: { print("Poubelles") }
+                    action: { print("Poubelles - À implémenter") }
                 )
                 .frame(width: 120, height: 140)
                 
@@ -255,7 +243,7 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.parcColor,
-                    action: { print("Parcs et Jardins") }
+                    action: { print("Parcs et Jardins - À implémenter") }
                 )
                 .frame(height: 140)
             }
@@ -272,7 +260,7 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.compostColor,
-                    action: { print("Compost") }
+                    action: { print("Compost - À implémenter") }
                 )
                 .frame(height: 115)
                 
@@ -286,14 +274,14 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.silosColor,
-                    action: { print("Silos") }
+                    action: { print("Silos - À implémenter") }
                 )
                 .frame(width: 100, height: 115)
             }
             
             // LIGNE 4: Bancs + Toilettes + Bornes Électriques
             HStack(spacing: MenuDesignSystem.cardSpacing) {
-                // ✅ MODIFIÉ: Bancs avec navigation
+                // ✅ Bancs avec navigation DIRECTE
                 MenuCardRedesigned(
                     title: "Bancs",
                     icon: "Banc",
@@ -303,11 +291,13 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.bancsColor,
-                    action: { navigationManager.navigateToBancs() }
+                    action: {
+                        navigationManager.navigateToBancs()
+                    }
                 )
                 .frame(height: 155)
                 
-                // Toilettes Publiques - MODIFIÉ pour la navigation
+                // ✅ Toilettes avec navigation DIRECTE
                 MenuCardRedesigned(
                     title: "Toilettes\nPubliques",
                     icon: "Wc",
@@ -317,7 +307,9 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.toilettesColor,
-                    action: { navigationManager.navigateToToilets() }
+                    action: {
+                        navigationManager.navigateToToilets()
+                    }
                 )
                 .frame(height: 155)
                 
@@ -331,7 +323,7 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.bornesColor,
-                    action: { print("Bornes Électriques") }
+                    action: { print("Bornes Électriques - À implémenter") }
                 )
                 .frame(height: 155)
             }
@@ -452,126 +444,29 @@ struct MenuCardRedesigned: View {
     }
 }
 
-// MARK: - Exemples d'utilisation mis à jour
-
-// ✅ Dans ContentView (page principale) - MODIFIÉ
-struct ContentViewMenuExample: View {
-    @State private var isMenuExpanded = false
-    @State private var showToiletsMap = false
-    @State private var showBancsMap = false // ✅ NOUVEAU
-    
-    var body: some View {
-        ZStack {
-            // Votre contenu principal ici
-            ScrollView {
-                VStack(spacing: 0) {
-                    // Votre contenu...
-                    Spacer(minLength: 120)
-                }
-            }
-            .background(Color(red: 248/255, green: 247/255, blue: 244/255))
-            
-            // ✅ Menu SANS thème (comportement par défaut) - MODIFIÉ
-            FixedBottomMenuView(
-                isMenuExpanded: $isMenuExpanded,
-                showToiletsMap: $showToiletsMap,
-                showBancsMap: $showBancsMap, // ✅ NOUVEAU
-                onHomeSelected: {
-                    print("Retour à l'accueil")
-                }
-                // PAS de themeColor = comportement par défaut
-            )
-        }
-        .fullScreenCover(isPresented: $showToiletsMap) {
-            ToiletsMapViewExample()
-        }
-        .fullScreenCover(isPresented: $showBancsMap) { // ✅ NOUVEAU
-            BancsMapViewExample()
-        }
-    }
-}
-
-// ✅ Dans ToiletsMapView (page toilettes) - MODIFIÉ
-struct ToiletsMapViewExample: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var isMenuExpanded = false
-    @State private var showToiletsMap = false
-    @State private var showBancsMap = false // ✅ NOUVEAU
-    
-    var body: some View {
-        ZStack {
-            // Contenu principal
-            ScrollView {
-                VStack(spacing: 0) {
-                    // Votre contenu toilettes...
-                    Text("Page Toilettes")
-                        .font(.largeTitle)
-                        .padding()
-                    
-                    Spacer(minLength: 120)
-                }
-            }
-            .background(Color(red: 248/255, green: 247/255, blue: 244/255))
-            
-            // ✅ Menu AVEC thème toilettes - MODIFIÉ
-            FixedBottomMenuView(
-                isMenuExpanded: $isMenuExpanded,
-                showToiletsMap: $showToiletsMap,
-                showBancsMap: $showBancsMap, // ✅ NOUVEAU
-                onHomeSelected: {
-                    dismiss()
-                },
-                themeColor: Color(red: 0.7, green: 0.7, blue: 0.7) // ✅ Couleur toilettes
-            )
-        }
-        .fullScreenCover(isPresented: $showBancsMap) { // ✅ NOUVEAU
-            BancsMapViewExample()
-        }
-    }
-}
-
-// ✅ NOUVEAU: Dans BancsMapView (page bancs)
-struct BancsMapViewExample: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var isMenuExpanded = false
-    @State private var showToiletsMap = false
-    @State private var showBancsMap = false
-    
-    var body: some View {
-        ZStack {
-            // Contenu principal
-            ScrollView {
-                VStack(spacing: 0) {
-                    // Votre contenu bancs...
-                    Text("Page Bancs")
-                        .font(.largeTitle)
-                        .padding()
-                    
-                    Spacer(minLength: 120)
-                }
-            }
-            .background(Color(red: 248/255, green: 247/255, blue: 244/255))
-            
-            // ✅ Menu AVEC thème bancs
-            FixedBottomMenuView(
-                isMenuExpanded: $isMenuExpanded,
-                showToiletsMap: $showToiletsMap,
-                showBancsMap: $showBancsMap,
-                onHomeSelected: {
-                    dismiss()
-                },
-                themeColor: Color(red: 0.7, green: 0.5, blue: 0.4) // ✅ Couleur bancs
-            )
-        }
-        .fullScreenCover(isPresented: $showToiletsMap) {
-            ToiletsMapViewExample()
-        }
-    }
-}
-
 // MARK: - Preview
-struct FixedBottomMenuView_Previews: PreviewProvider {
-    static var previews: some View {
-        ContentViewMenuExample()
+#Preview {
+    struct PreviewWrapper: View {
+        @State private var isMenuExpanded = false
+        @State private var showToiletsMap = false
+        @State private var showBancsMap = false
+        
+        var body: some View {
+            ZStack {
+                Color(red: 248/255, green: 247/255, blue: 244/255)
+                    .ignoresSafeArea()
+                
+                FixedBottomMenuView(
+                    isMenuExpanded: $isMenuExpanded,
+                    showToiletsMap: $showToiletsMap,
+                    showBancsMap: $showBancsMap,
+                    onHomeSelected: {
+                        print("Accueil sélectionné")
+                    }
+                )
+            }
+        }
     }
+    
+    return PreviewWrapper()
 }

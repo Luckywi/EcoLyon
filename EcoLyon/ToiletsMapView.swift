@@ -2,21 +2,19 @@ import SwiftUI
 import MapKit
 import Foundation
 
-// MARK: - ToiletsMapView avec structure identique à ContentView
+// MARK: - ToiletsMapView CORRIGÉ pour la nouvelle navigation
 struct ToiletsMapView: View {
-    @Environment(\.dismiss) private var dismiss
+    // ✅ SUPPRESSION @Environment(\.dismiss) - plus nécessaire
     @StateObject private var toiletService = ToiletAPIService()
     @StateObject private var locationService = GlobalLocationService.shared
     @StateObject private var navigationManager = NavigationManager.shared
     
-    
-    // ✅ Region initialisée avec position utilisateur si disponible
+    // Region et états (inchangés)
     @State private var region: MKCoordinateRegion
     @State private var searchText = ""
     @State private var addressSuggestions: [AddressSuggestion] = []
     @State private var showSuggestions = false
     @State private var searchedLocation: CLLocationCoordinate2D?
-
     
     // ✅ COULEUR UNIFIÉE
     private let toiletThemeColor = Color(red: 0.7, green: 0.7, blue: 0.7)
@@ -134,41 +132,38 @@ struct ToiletsMapView: View {
             // ✅ MENU DIRECTEMENT DANS LE ZSTACK - COMME CONTENTVIEW
             FixedBottomMenuView(
                 isMenuExpanded: $navigationManager.isMenuExpanded,
-                showToiletsMap: .constant(false),
-                showBancsMap: .constant(false),
-                onHomeSelected: { dismiss() },
-                themeColor: Color(red: 0.7, green: 0.7, blue: 0.7)
+                showToiletsMap: $navigationManager.showToiletsMap,  // ✅ CORRIGÉ
+                showBancsMap: $navigationManager.showBancsMap,      // ✅ CORRIGÉ
+                onHomeSelected: {
+                    navigationManager.navigateToHome()  // ✅ CORRIGÉ
+                },
+                themeColor: toiletThemeColor
             )
-        }
-        .onAppear {
-            navigationManager.currentDestination = "toilets"
-            setupInitialLocation()
-            loadToilets()
-        }
-        .onDisappear {
-            locationService.stopLocationUpdates()
-        }
-        .onChange(of: locationService.isLocationReady) { isReady in
-            if isReady, let location = locationService.userLocation {
-                centerMapOnLocation(location)
-                print("📍 Toilettes: Position mise à jour automatiquement")
+            
+            .onAppear {
+                navigationManager.currentDestination = "toilets"
+                setupInitialLocation()
+                loadToilets()
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToBancs"))) { _ in
-            dismiss()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToHome"))) { _ in
-            dismiss()
-        }
-        .overlay {
-            if toiletService.isLoading && toiletService.toilets.isEmpty {
-                LoadingOverlayView(themeColor: toiletThemeColor)
+            .onDisappear {
+                locationService.stopLocationUpdates()
             }
-        }
-        .overlay {
-            if let errorMessage = toiletService.errorMessage {
-                ErrorOverlayView(message: errorMessage, themeColor: toiletThemeColor) {
-                    loadToilets()
+            .onChange(of: locationService.isLocationReady) { isReady in
+                if isReady, let location = locationService.userLocation {
+                    centerMapOnLocation(location)
+                    print("📍 Toilettes: Position mise à jour automatiquement")
+                }
+            }
+            .overlay {
+                if toiletService.isLoading && toiletService.toilets.isEmpty {
+                    LoadingOverlayView(themeColor: toiletThemeColor)
+                }
+            }
+            .overlay {
+                if let errorMessage = toiletService.errorMessage {
+                    ErrorOverlayView(message: errorMessage, themeColor: toiletThemeColor) {
+                        loadToilets()
+                    }
                 }
             }
         }
@@ -600,11 +595,7 @@ struct MapBoxView: View {
                     }
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    region.span = MKCoordinateSpan(latitudeDelta: 0.009, longitudeDelta: 0.009)
-                }
-            }
+        
             .frame(height: 350) // ✅ Réduit la hauteur pour faire de la place
         }
         .background(Color(.systemBackground))

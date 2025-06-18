@@ -2,10 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var navigationManager = NavigationManager.shared
-    @State private var showToiletsMap = false
-    @State private var showBancsMap = false
     @State private var currentAQI = 3 // AQI de votre composant air quality
- 
     
     var body: some View {
         ZStack {
@@ -27,7 +24,7 @@ struct ContentView: View {
                     AirQualityRecommendationsView(fallbackAQI: currentAQI)
                         .padding(.bottom, 30)
                     
-                    // NOUVEAU : Composant Services Environnementaux
+                    // Composant Services Environnementaux
                     EnvironmentCardView()
                         .padding(.bottom, 30)
                     
@@ -36,79 +33,47 @@ struct ContentView: View {
                 }
             }
             .background(Color(red: 248/255, green: 247/255, blue: 244/255))
-            .fullScreenCover(isPresented: $showToiletsMap) {
-                ToiletsMapView()
-            }
-            .fullScreenCover(isPresented: $showBancsMap) { // ✅ AJOUTÉ : fullScreenCover pour les bancs
-                BancsMapView()
-            }
             
-            // Menu Bottom fixe
+            // ✅ MENU CORRIGÉ - PLUS DE .constant(false)
             FixedBottomMenuView(
                 isMenuExpanded: $navigationManager.isMenuExpanded,
-                showToiletsMap: .constant(false),
-                showBancsMap: .constant(false),
+                showToiletsMap: $navigationManager.showToiletsMap,
+                showBancsMap: $navigationManager.showBancsMap,
                 onHomeSelected: {
-                    print("Déjà sur l'accueil")
+                    navigationManager.navigateToHome()
                 }
             )
-        }
-        // ✅ AJOUTÉ : Debug pour voir les changements d'état
-        .onChange(of: showBancsMap) { newValue in
-            print("🪑 ContentView - showBancsMap changed to: \(newValue)")
-        }
-        .onChange(of: showToiletsMap) { newValue in
-            print("🚽 ContentView - showToiletsMap changed to: \(newValue)")
         }
         .onAppear {
             navigationManager.currentDestination = "home"
         }
-        // ✅ CRUCIAL : Écoute des notifications de nav
-       
-    }
-}
-
-// MARK: - Composant exemple pour d'autres services
-struct ExampleServiceButton: View {
-    var body: some View {
-        Button(action: {
-            // Action pour un autre service
-        }) {
-            HStack(spacing: 15) {
-                Image(systemName: "bus.fill")
-                    .font(.system(size: 24))
-                    .foregroundColor(.white)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Transports")
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                    
-                    Text("Horaires et itinéraires TCL")
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.8))
+        // ✅ NAVIGATION CORRIGÉE - UTILISE LES ÉTATS DU NAVIGATIONMANAGER
+        .fullScreenCover(isPresented: $navigationManager.showToiletsMap) {
+            ToiletsMapView()
+                .onDisappear {
+                    navigationManager.closeToilets()
                 }
-                
-                Spacer()
-                
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.8))
-            }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 16)
-            .background(
-                LinearGradient(
-                    gradient: Gradient(colors: [.green, .green.opacity(0.8)]),
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .cornerRadius(16)
-            .shadow(color: .green.opacity(0.3), radius: 8, x: 0, y: 4)
         }
-        .padding(.horizontal, 20)
+        .fullScreenCover(isPresented: $navigationManager.showBancsMap) {
+            BancsMapView()
+                .onDisappear {
+                    navigationManager.closeBancs()
+                }
+        }
+        .fullScreenCover(isPresented: $navigationManager.showFontainesMap) {
+            // FontainesMapView() // À créer
+            Text("Fontaines - À implémenter")
+                .onDisappear {
+                    navigationManager.closeFontaines()
+                }
+        }
+        .fullScreenCover(isPresented: $navigationManager.showRandosMap) {
+            // RandosMapView() // À créer
+            Text("Randos - À implémenter")
+                .onDisappear {
+                    navigationManager.closeRandos()
+                }
+        }
     }
 }
 
