@@ -262,6 +262,10 @@ struct EcoLyonApp: App {
         // ✅ DÉMARRER LA LOCALISATION DÈS LE LANCEMENT AVEC STRATÉGIE OPTIMISÉE
         _ = GlobalLocationService.shared
         print("🚀 App lancée - Localisation optimisée démarrée immédiatement")
+        
+        // ✅ AJOUT : Démarrer le préchargement des Lyon Facts
+               _ = LyonFactsPreloader.shared
+               print("🖼️ Préchargement Lyon Facts démarré")
     }
 
     var body: some Scene {

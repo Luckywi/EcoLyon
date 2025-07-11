@@ -34,11 +34,18 @@ struct ContentView: View {
             }
             .background(Color(red: 248/255, green: 247/255, blue: 244/255))
             
-            // ✅ MENU CORRIGÉ - PLUS DE .constant(false)
+            // ✅ MENU CORRIGÉ - AVEC FONTAINES INTÉGRÉES
             FixedBottomMenuView(
                 isMenuExpanded: $navigationManager.isMenuExpanded,
                 showToiletsMap: $navigationManager.showToiletsMap,
                 showBancsMap: $navigationManager.showBancsMap,
+                showFontainesMap: $navigationManager.showFontainesMap,  // ✅ AJOUTÉ
+                showSilosMap: $navigationManager.showSilosMap,
+                showBornesMap: $navigationManager.showBornesMap,
+                showCompostMap: $navigationManager.showCompostMap,
+                showParcsMap: $navigationManager.showParcsMap,
+                showPoubelleMap: $navigationManager.showPoubelleMap,
+                showRandosMap: $navigationManager.showRandosMap,
                 onHomeSelected: {
                     navigationManager.navigateToHome()
                 }
@@ -60,20 +67,69 @@ struct ContentView: View {
                     navigationManager.closeBancs()
                 }
         }
+        // ✅ FONTAINES INTÉGRÉES - REMPLACE LE PLACEHOLDER
         .fullScreenCover(isPresented: $navigationManager.showFontainesMap) {
-            // FontainesMapView() // À créer
-            Text("Fontaines - À implémenter")
+            FontainesMapView()
                 .onDisappear {
                     navigationManager.closeFontaines()
                 }
         }
         .fullScreenCover(isPresented: $navigationManager.showRandosMap) {
-            // RandosMapView() // À créer
-            Text("Randos - À implémenter")
+            RandosMapView()
                 .onDisappear {
                     navigationManager.closeRandos()
                 }
         }
+        .fullScreenCover(isPresented: $navigationManager.showSilosMap) {
+            SilosMapView()
+                .onDisappear {
+                    navigationManager.closeSilos()
+                }
+        }
+        .fullScreenCover(isPresented: $navigationManager.showBornesMap) {
+            BornesMapView()
+                .onDisappear {
+                    navigationManager.closeBornes()
+                }
+        }
+        .fullScreenCover(isPresented: $navigationManager.showCompostMap) {
+            CompostMapView()
+                .onDisappear {
+                    navigationManager.closeCompost()
+                }
+        }
+        .fullScreenCover(isPresented: $navigationManager.showParcsMap) {
+            ParcsMapView()
+                .onDisappear {
+                    navigationManager.closeParcs()
+                }
+        }
+        .fullScreenCover(isPresented: $navigationManager.showPoubelleMap) {
+            PoubelleMapView()
+                .onDisappear {
+                    navigationManager.closePoubelle()
+                }
+        }
+        .fullScreenCover(isPresented: $navigationManager.showComposteurGratuitView) {
+            ComposteurGratuitView()
+                .onDisappear {
+                    navigationManager.closeComposteurGratuit()
+                }
+        }
+        .fullScreenCover(isPresented: $navigationManager.showCompostGuideView) {
+            CompostGuideView()
+                .onDisappear {
+                    navigationManager.closeCompostGuide()
+                }
+        }
+        .fullScreenCover(isPresented: $navigationManager.showLyonFactsView) {
+            LyonFactsView()
+                .onDisappear {
+                    navigationManager.closeLyonFacts()
+                }
+        }
+
+
     }
 }
 

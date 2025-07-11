@@ -1,0 +1,23 @@
+{
+  "images" : [
+    {
+      "filename" : "20250704_0905_Logo sur Fond Transparent_remix_01jza3zqdreh48ekrqzx33z74k.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "20250704_0905_Logo sur Fond Transparent_remix_01jza3zqdreh48ekrqzx33z74k 1.png",
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "filename" : "20250704_0905_Logo sur Fond Transparent_remix_01jza3zqdreh48ekrqzx33z74k 2.png",
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

@@ -2,86 +2,56 @@ import SwiftUI
 import MapKit
 import Foundation
 
-// MARK: - BancsMapView avec structure identique à ContentView
+// MARK: - BancsMapView ultra-optimisé avec filtrage géographique
 struct BancsMapView: View {
-    @StateObject private var bancService = BancAPIService()
+    @StateObject private var bancService = OptimizedBancAPIService()
     @StateObject private var locationService = GlobalLocationService.shared
     @StateObject private var navigationManager = NavigationManager.shared
-    @StateObject private var clusteringService = BancClusteringService()
     
-    // ✅ Region initialisée avec position utilisateur si disponible
+    // ✅ Region initialisée avec position utilisateur, zoom serré
     @State private var region: MKCoordinateRegion
     @State private var searchText = ""
-    @State private var addressSuggestions: [AddressSuggestion] = []
+    @State private var addressSuggestions: [BancAddressSuggestion] = []
     @State private var showSuggestions = false
     @State private var searchedLocation: CLLocationCoordinate2D?
-    @State private var selectedCluster: BancCluster?
-    @State private var showDetailedBancs = false
+    
+    // ✅ État pour gérer le focus actuel (utilisateur ou recherche)
+    @State private var focusLocation: CLLocationCoordinate2D?
+    @State private var isSearchMode = false
+    @State private var showInfoModal = false // ✅ Nouvelle variable pour la bulle info
     
     // ✅ COULEUR UNIFIÉE
     private let bancThemeColor = Color(red: 0.7, green: 0.5, blue: 0.4)
     
-    // ✅ Computed property pour les 3 bancs les plus proches
-    private var nearestBancs: [BancLocation] {
-        guard let userLocation = locationService.userLocation else { return [] }
-        
-        return bancService.bancs
-            .map { banc in
-                let distance = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
-                    .distance(from: CLLocation(latitude: banc.coordinate.latitude, longitude: banc.coordinate.longitude))
-                return (banc: banc, distance: distance)
-            }
-            .sorted { $0.distance < $1.distance }
-            .prefix(3)
-            .map { $0.banc }
+    // ✅ Location actuelle à utiliser (utilisateur ou recherche)
+    private var currentFocusLocation: CLLocationCoordinate2D? {
+        if isSearchMode, let searchLocation = searchedLocation {
+            return searchLocation
+        }
+        return locationService.userLocation
     }
     
-    // ✅ Computed property pour les annotations clusterisées
-    private var clusteredAnnotations: [BancMapAnnotationItem] {
-        let clusters = clusteringService.clusterBancs(bancService.bancs, for: region)
+    // ✅ Computed property pour les bancs proches du focus actuel
+    private var nearbyBancs: [BancLocation] {
+        return bancService.nearbyBancs
+    }
+    
+    // ✅ Computed property pour les 3 bancs les plus proches (section)
+    private var topThreeBancs: [BancLocation] {
+        return Array(nearbyBancs.prefix(3))
+    }
+    
+    // ✅ Computed property pour les annotations
+    private var mapAnnotations: [BancMapAnnotationItem] {
         var annotations: [BancMapAnnotationItem] = []
         
-        // Vérifier si on doit afficher les détails d'un cluster
-        let shouldShowDetails = showDetailedBancs && selectedCluster != nil
-        
-        if shouldShowDetails, let selectedCluster = selectedCluster {
-            // Afficher uniquement les bancs du cluster sélectionné
-            for banc in selectedCluster.bancs {
-                annotations.append(BancMapAnnotationItem(
-                    banc: banc,
-                    coordinate: banc.coordinate,
-                    isSearchResult: false,
-                    isCluster: false,
-                    clusterCount: 0,
-                    clusterBancs: []
-                ))
-            }
-        } else {
-            // Affichage normal avec clusters
-            for cluster in clusters {
-                if cluster.bancs.count > 1 {
-                    // Cluster avec plusieurs bancs
-                    annotations.append(BancMapAnnotationItem(
-                        banc: nil,
-                        coordinate: cluster.centerCoordinate,
-                        isSearchResult: false,
-                        isCluster: true,
-                        clusterCount: cluster.bancs.count,
-                        clusterBancs: cluster.bancs,
-                        clusterId: cluster.id
-                    ))
-                } else if let singleBanc = cluster.bancs.first {
-                    // Banc isolé
-                    annotations.append(BancMapAnnotationItem(
-                        banc: singleBanc,
-                        coordinate: singleBanc.coordinate,
-                        isSearchResult: false,
-                        isCluster: false,
-                        clusterCount: 0,
-                        clusterBancs: []
-                    ))
-                }
-            }
+        // Afficher les bancs proches
+        for banc in nearbyBancs {
+            annotations.append(BancMapAnnotationItem(
+                banc: banc,
+                coordinate: banc.coordinate,
+                isSearchResult: false
+            ))
         }
         
         // Ajouter le pin de recherche si présent
@@ -89,17 +59,14 @@ struct BancsMapView: View {
             annotations.append(BancMapAnnotationItem(
                 banc: nil,
                 coordinate: searchedLocation,
-                isSearchResult: true,
-                isCluster: false,
-                clusterCount: 0,
-                clusterBancs: []
+                isSearchResult: true
             ))
         }
         
         return annotations
     }
     
-    // ✅ Initializer personnalisé
+    // ✅ Initializer avec zoom serré
     init() {
         let initialCenter: CLLocationCoordinate2D
         if let userLocation = GlobalLocationService.shared.userLocation {
@@ -112,17 +79,15 @@ struct BancsMapView: View {
         
         _region = State(initialValue: MKCoordinateRegion(
             center: initialCenter,
-            span: MKCoordinateSpan(latitudeDelta: 0.009, longitudeDelta: 0.009)
+            span: MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
         ))
     }
     
     var body: some View {
-        // ✅ STRUCTURE IDENTIQUE À CONTENTVIEW
         ZStack {
-            // ✅ Contenu principal dans ScrollView
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 0) {
-                    // ✅ TITRE FIXE EN HAUT
+                    // ✅ TITRE FIXE EN HAUT AVEC BOUTON INFO
                     HStack(spacing: 12) {
                         Image("Banc")
                             .resizable()
@@ -130,9 +95,34 @@ struct BancsMapView: View {
                             .frame(width: 50, height: 50)
                             .foregroundColor(bancThemeColor)
                         
-                        Text("Bancs Publics")
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(.primary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 8) {
+                                Text("Bancs Publics")
+                                    .font(.system(size: 24, weight: .bold))
+                                    .foregroundColor(.primary)
+                                
+                                // ✅ BOUTON INFO SIMPLE
+                                Button(action: {
+                                    withAnimation(.easeInOut(duration: 0.2)) {
+                                        showInfoModal.toggle()
+                                    }
+                                }) {
+                                    Image(systemName: "info.circle")
+                                        .font(.system(size: 18))
+                                        .foregroundColor(bancThemeColor)
+                                }
+                            }
+                            
+                            if isSearchMode {
+                                Text("Autour de votre recherche")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text("Autour de vous")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
                         
                         Spacer()
                     }
@@ -140,7 +130,28 @@ struct BancsMapView: View {
                     .padding(.top, 10)
                     .padding(.bottom, 20)
                     
-                    // ✅ Barre de recherche
+                    // ✅ PETITE BULLE D'INFO
+                    if showInfoModal {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("La carte renvoie les 50 bancs les plus proches dans un rayon de 800m autour de l'utilisateur ou du point de recherche sur les 10 510 bancs référencés.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(bancThemeColor.opacity(0.1))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(bancThemeColor.opacity(0.3), lineWidth: 1)
+                        )
+                        .padding(.horizontal)
+                        .padding(.bottom, 12)
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                    }
+                    
+                    // ✅ Barre de recherche améliorée
                     VStack(spacing: 0) {
                         BancSmartSearchBarView(
                             searchText: $searchText,
@@ -149,6 +160,7 @@ struct BancsMapView: View {
                             onSearchTextChanged: handleSearchTextChange,
                             onSuggestionTapped: handleSuggestionTap,
                             onSearchSubmitted: handleSearchSubmitted,
+                            onClearSearch: handleClearSearch,
                             themeColor: bancThemeColor
                         )
                         
@@ -162,138 +174,98 @@ struct BancsMapView: View {
                     .padding(.horizontal)
                     .padding(.bottom, 16)
                     
-                    // ✅ Carte avec clustering
+                    // ✅ Carte optimisée
                     BancMapBoxView(
                         region: $region,
-                        bancs: bancService.bancs,
-                        clusteredAnnotations: clusteredAnnotations,
+                        bancs: nearbyBancs,
+                        mapAnnotations: mapAnnotations,
                         userLocation: locationService.userLocation,
                         searchedLocation: searchedLocation,
                         isLoading: bancService.isLoading,
-                        themeColor: bancThemeColor,
-                        onClusterTapped: handleClusterTap
+                        isSearchMode: isSearchMode,
+                        themeColor: bancThemeColor
                     )
                     .padding(.horizontal)
                     .padding(.bottom, 16)
-                    .onChange(of: region) { newRegion in
-                        // Recalculer les clusters quand la région change
-                        clusteringService.updateClustering()
-                        
-                        // Vérifier si on doit masquer les détails (zoom out de plus de 100m)
-                        if showDetailedBancs, let selectedCluster = selectedCluster {
-                            let currentDistance = calculateDistanceFromCenter(to: selectedCluster.centerCoordinate, in: newRegion)
-                            if currentDistance > 100 {
-                                showDetailedBancs = false
-                                self.selectedCluster = nil
-                                print("🔍 Zoom out détecté, masquage des détails du cluster")
-                            }
-                        }
-                    }
                     
                     // ✅ Section des 3 bancs les plus proches
-                    if !nearestBancs.isEmpty && locationService.userLocation != nil {
+                    if !topThreeBancs.isEmpty {
                         NearestBancsView(
-                            bancs: nearestBancs,
-                            userLocation: locationService.userLocation!,
+                            bancs: topThreeBancs,
+                            referenceLocation: currentFocusLocation ?? region.center,
+                            isSearchMode: isSearchMode,
                             themeColor: bancThemeColor
                         )
                         .padding(.horizontal)
                         .padding(.bottom, 30)
                     }
                     
-                    // ✅ ESPACE POUR LE MENU EN BAS - IDENTIQUE À CONTENTVIEW
                     Spacer(minLength: 120)
                 }
             }
             .background(Color(red: 248/255, green: 247/255, blue: 244/255))
             .refreshable {
-                await bancService.loadBancs()
+                await refreshCurrentLocation()
+            }
+            .onTapGesture {
+                // Fermer la bulle info si on tape ailleurs
+                if showInfoModal {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showInfoModal = false
+                    }
+                }
             }
             
-            // ✅ MENU DIRECTEMENT DANS LE ZSTACK - COMME CONTENTVIEW
+            // ✅ MENU DIRECTEMENT DANS LE ZSTACK
             FixedBottomMenuView(
                 isMenuExpanded: $navigationManager.isMenuExpanded,
-                showToiletsMap: $navigationManager.showToiletsMap,  // ✅ CORRIGÉ
-                showBancsMap: $navigationManager.showBancsMap,      // ✅ CORRIGÉ
+                showToiletsMap: $navigationManager.showToiletsMap,
+                showBancsMap: $navigationManager.showBancsMap,
+                showFontainesMap: $navigationManager.showFontainesMap,
+                showSilosMap: $navigationManager.showSilosMap,
+                showBornesMap: $navigationManager.showBornesMap,
+                showCompostMap: $navigationManager.showCompostMap,
+                showParcsMap: $navigationManager.showParcsMap,
+                showPoubelleMap: $navigationManager.showPoubelleMap,
+                showRandosMap: $navigationManager.showRandosMap,
                 onHomeSelected: {
-                    navigationManager.navigateToHome()              // ✅ CORRIGÉ
+                    navigationManager.navigateToHome()
                 },
-                themeColor: Color(red: 0.7, green: 0.5, blue: 0.4)
+                themeColor: bancThemeColor
             )
-            .onAppear {
-                navigationManager.currentDestination = "bancs"
-                setupInitialLocation()
-                loadBancs()
-            }
-            .onDisappear {
-                locationService.stopLocationUpdates()
-            }
-            .onChange(of: locationService.isLocationReady) { isReady in
-                if isReady, let location = locationService.userLocation {
-                    centerMapOnLocation(location)
-                    print("📍 Bancs: Position mise à jour automatiquement")
+        }
+        .onAppear {
+            navigationManager.currentDestination = "bancs"
+            setupInitialLocation()
+        }
+        .onDisappear {
+            locationService.stopLocationUpdates()
+        }
+        .onChange(of: locationService.isLocationReady) { isReady in
+            if isReady, let location = locationService.userLocation, !isSearchMode {
+                centerMapOnLocation(location)
+                Task {
+                    await bancService.loadBancsAroundLocation(location)
                 }
             }
-            
-            .overlay {
-                if bancService.isLoading && bancService.bancs.isEmpty {
-                    BancLoadingOverlayView(themeColor: bancThemeColor)
-                }
+        }
+        .overlay {
+            if bancService.isLoading && bancService.nearbyBancs.isEmpty {
+                BancLoadingOverlayView(themeColor: bancThemeColor)
             }
-            .overlay {
-                if let errorMessage = bancService.errorMessage {
-                    BancErrorOverlayView(message: errorMessage, themeColor: bancThemeColor) {
-                        loadBancs()
+        }
+        .overlay {
+            if let errorMessage = bancService.errorMessage {
+                BancErrorOverlayView(message: errorMessage, themeColor: bancThemeColor) {
+                    Task {
+                        await refreshCurrentLocation()
                     }
                 }
             }
         }
     }
     
-    // MARK: - ✅ NOUVELLE FONCTION POUR GÉRER LE TAP SUR CLUSTER
-    private func handleClusterTap(_ cluster: BancCluster) {
-        selectedCluster = cluster
-        showDetailedBancs = true
-        
-        // Zoomer sur le cluster avec une vue détaillée
-        let clusterRegion = MKCoordinateRegion(
-            center: cluster.centerCoordinate,
-            span: MKCoordinateSpan(latitudeDelta: 0.002, longitudeDelta: 0.002) // Zoom très proche
-        )
-        
-        withAnimation(.easeInOut(duration: 0.6)) {
-            region = clusterRegion
-        }
-        
-        print("🎯 Zoom sur cluster: \(cluster.bancs.count) bancs à afficher en détail")
-    }
-    
-    // MARK: - ✅ FONCTION POUR CALCULER LA DISTANCE DEPUIS LE CENTRE
-    private func calculateDistanceFromCenter(to coordinate: CLLocationCoordinate2D, in region: MKCoordinateRegion) -> Double {
-        let regionCenter = CLLocation(latitude: region.center.latitude, longitude: region.center.longitude)
-        let targetLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        return regionCenter.distance(from: targetLocation)
-    }
-    
-    // MARK: - Fonctions optimisées (inchangées)
-    
-    private func setupInitialLocation() {
-        print("🗺️ Setup initial - bancs")
-        
-        if locationService.userLocation == nil {
-            print("🔄 Position pas encore disponible, refresh en cours...")
-            locationService.refreshLocation()
-        } else {
-            print("✅ Position déjà disponible depuis l'init")
-        }
-    }
-    
-    private func loadBancs() {
-        Task {
-            await bancService.loadBancs()
-        }
-    }
-    
+    // MARK: - ✅ GESTION DE LA RECHERCHE AMÉLIORÉE
     private func handleSearchTextChange(_ text: String) {
         searchText = text
         
@@ -309,11 +281,22 @@ struct BancsMapView: View {
         }
     }
     
-    private func handleSuggestionTap(_ suggestion: AddressSuggestion) {
+    private func handleSuggestionTap(_ suggestion: BancAddressSuggestion) {
         searchText = suggestion.title
         showSuggestions = false
+        
+        // ✅ ACTIVER LE MODE RECHERCHE
+        isSearchMode = true
         searchedLocation = suggestion.coordinate
+        focusLocation = suggestion.coordinate
+        
+        // ✅ CHARGER LES BANCS AUTOUR DE LA RECHERCHE
+        Task {
+            await bancService.loadBancsAroundLocation(suggestion.coordinate)
+        }
+        
         centerMapOnLocation(suggestion.coordinate)
+        print("🔍 Mode recherche activé: \(suggestion.title)")
     }
     
     private func handleSearchSubmitted() {
@@ -321,45 +304,65 @@ struct BancsMapView: View {
         
         Task {
             if let coordinate = await geocodeAddress(searchText) {
+                isSearchMode = true
                 searchedLocation = coordinate
+                focusLocation = coordinate
+                
+                await bancService.loadBancsAroundLocation(coordinate)
                 centerMapOnLocation(coordinate)
+                print("🔍 Recherche soumise: \(searchText)")
             }
         }
     }
     
-    private func centerOnUserLocation() {
-        print("🎯 Demande de centrage sur utilisateur")
+    // ✅ NOUVELLE FONCTION POUR EFFACER LA RECHERCHE
+    private func handleClearSearch() {
+        searchText = ""
+        searchedLocation = nil
+        isSearchMode = false
+        showSuggestions = false
+        
+        // Retourner à la position utilisateur
+        if let userLocation = locationService.userLocation {
+            focusLocation = userLocation
+            centerMapOnLocation(userLocation)
+            Task {
+                await bancService.loadBancsAroundLocation(userLocation)
+            }
+            print("🏠 Retour au mode utilisateur")
+        }
+    }
+    
+    // MARK: - Fonctions conservées et optimisées
+    
+    private func setupInitialLocation() {
+        print("🗺️ Setup initial - bancs optimisé")
         
         if let userLocation = locationService.userLocation {
-            print("✅ Position disponible, centrage immédiat")
-            centerMapOnLocation(userLocation)
-        } else {
-            print("🔄 Position indisponible, demande de refresh")
-            locationService.refreshLocation()
-            
-            let startTime = Date()
-            Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { timer in
-                if let userLocation = locationService.userLocation {
-                    timer.invalidate()
-                    centerMapOnLocation(userLocation)
-                    print("✅ Position reçue après \(Date().timeIntervalSince(startTime))s")
-                } else if Date().timeIntervalSince(startTime) > 2.0 {
-                    timer.invalidate()
-                    print("⏰ Pas de position après 2s - garder position actuelle")
-                }
+            focusLocation = userLocation
+            Task {
+                await bancService.loadBancsAroundLocation(userLocation)
             }
+        } else {
+            locationService.refreshLocation()
+        }
+    }
+    
+    private func refreshCurrentLocation() async {
+        if let currentLocation = currentFocusLocation {
+            await bancService.loadBancsAroundLocation(currentLocation)
         }
     }
     
     private func centerMapOnLocation(_ coordinate: CLLocationCoordinate2D) {
         withAnimation(.easeInOut(duration: 0.5)) {
             region.center = coordinate
-            region.span = MKCoordinateSpan(latitudeDelta: 0.009, longitudeDelta: 0.009)
+            region.span = MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
         }
     }
     
-    // Fonctions de géocodage (inchangées)
-    private func searchAddresses(query: String) async -> [AddressSuggestion] {
+    // MARK: - Fonctions de géocodage (corrigées)
+    private func searchAddresses(query: String) async -> [BancAddressSuggestion] {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return []
         }
@@ -399,7 +402,7 @@ struct BancsMapView: View {
                 } ?? []
                 
                 let suggestions = filteredItems.prefix(5).map { item in
-                    AddressSuggestion(
+                    BancAddressSuggestion(
                         title: item.name ?? "Sans nom",
                         subtitle: self.formatFrenchAddress(item.placemark),
                         coordinate: item.placemark.coordinate
@@ -449,162 +452,346 @@ struct BancsMapView: View {
     }
 }
 
-// MARK: - ✅ NOUVEAU SERVICE DE CLUSTERING
+// MARK: - ✅ SERVICE API ULTRA-OPTIMISÉ AVEC FILTRAGE GÉOGRAPHIQUE
 @MainActor
-class BancClusteringService: ObservableObject {
-    private var lastRegion: MKCoordinateRegion?
-    private var lastClusterTime: Date = Date.distantPast
-    private let clusteringThreshold: TimeInterval = 0.5 // 500ms de délai
+class OptimizedBancAPIService: ObservableObject {
+    @Published var nearbyBancs: [BancLocation] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
     
-    func clusterBancs(_ bancs: [BancLocation], for region: MKCoordinateRegion) -> [BancCluster] {
-        // Optimisation : ne pas recalculer si la région n'a pas changé significativement
-        if let lastRegion = lastRegion,
-           abs(lastRegion.center.latitude - region.center.latitude) < 0.001 &&
-           abs(lastRegion.center.longitude - region.center.longitude) < 0.001 &&
-           abs(lastRegion.span.latitudeDelta - region.span.latitudeDelta) < 0.001 &&
-           Date().timeIntervalSince(lastClusterTime) < clusteringThreshold {
-            // Retourner les clusters existants si disponibles
-            if !cachedClusters.isEmpty {
-                return cachedClusters
-            }
-        }
-        
-        lastRegion = region
-        lastClusterTime = Date()
-        
-        // Filtrer les bancs visibles dans la région actuelle avec une marge
-        let margin = 1.5 // Marge pour inclure les bancs légèrement hors écran
-        let visibleBancs = bancs.filter { banc in
-            let latDiff = abs(banc.coordinate.latitude - region.center.latitude)
-            let lonDiff = abs(banc.coordinate.longitude - region.center.longitude)
+    // ✅ Cache intelligent par zones avec expiration longue
+    private var zoneCache: [String: CachedZone] = [:]
+    private let cacheExpiryTime: TimeInterval = 3600 // ✅ 1 heure au lieu de 5 minutes
+    private let maxBancsToShow = 50
+    
+    // ✅ Cache global pour éviter les requêtes répétées
+    private static var globalBancsCache: [BancLocation] = []
+    private static var globalCacheTimestamp: Date = Date.distantPast
+    private static let globalCacheExpiry: TimeInterval = 86400 // 24 heures
+    
+    struct CachedZone {
+        let bancs: [BancLocation]
+        let timestamp: Date
+        let centerLocation: CLLocationCoordinate2D
+    }
+    
+    // ✅ FONCTION PRINCIPALE - AVEC CACHE GLOBAL
+    func loadBancsAroundLocation(_ location: CLLocationCoordinate2D) async {
+        // ✅ VÉRIFIER LE CACHE GLOBAL D'ABORD
+        if !Self.globalBancsCache.isEmpty,
+           Date().timeIntervalSince(Self.globalCacheTimestamp) < Self.globalCacheExpiry {
             
-            return latDiff <= (region.span.latitudeDelta * margin / 2) &&
-                   lonDiff <= (region.span.longitudeDelta * margin / 2)
-        }
-        
-        print("🔍 Clustering: \(visibleBancs.count) bancs visibles sur \(bancs.count) total")
-        
-        // Calculer la distance de clustering adaptée au zoom
-        let clusterDistance = calculateClusterDistance(for: region)
-        
-        // Algorithme de clustering simple mais efficace
-        var clusters: [BancCluster] = []
-        var processedBancs = Set<UUID>()
-        
-        for banc in visibleBancs {
-            if processedBancs.contains(banc.id) { continue }
-            
-            var clusterBancs = [banc]
-            processedBancs.insert(banc.id)
-            
-            // Trouver les bancs proches
-            for otherBanc in visibleBancs {
-                if processedBancs.contains(otherBanc.id) { continue }
-                
-                let distance = banc.coordinate.distance(to: otherBanc.coordinate)
-                if distance <= clusterDistance {
-                    clusterBancs.append(otherBanc)
-                    processedBancs.insert(otherBanc.id)
+            // Utiliser le cache global et filtrer localement
+            let nearbyBancs = Self.globalBancsCache
+                .map { banc in
+                    let distance = location.distance(to: banc.coordinate)
+                    return (banc: banc, distance: distance)
                 }
+                .filter { $0.distance <= 800 }
+                .sorted { $0.distance < $1.distance }
+                .map { $0.banc }
+            
+            self.nearbyBancs = Array(nearbyBancs.prefix(maxBancsToShow))
+            print("🌍 Cache global utilisé: \(self.nearbyBancs.count) bancs trouvés")
+            return
+        }
+        
+        // ✅ VÉRIFIER LE CACHE LOCAL
+        let zoneKey = generateZoneKey(for: location)
+        if let cachedZone = zoneCache[zoneKey],
+           Date().timeIntervalSince(cachedZone.timestamp) < cacheExpiryTime,
+           cachedZone.centerLocation.distance(to: location) < 200 {
+            
+            nearbyBancs = Array(cachedZone.bancs.prefix(maxBancsToShow))
+            print("📦 Cache local utilisé: \(nearbyBancs.count) bancs depuis le cache")
+            return
+        }
+        
+        // ✅ CHARGER DEPUIS L'API SEULEMENT SI NÉCESSAIRE
+        await loadBancsFromAPIFallback(around: location)
+    }
+    
+    // ✅ CHARGEMENT OPTIMISÉ AVEC BBOX ET DEBUG
+    private func loadBancsFromAPI(around location: CLLocationCoordinate2D) async {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            // ✅ ESSAYER D'ABORD AVEC BBOX
+            let optimizedURL = buildOptimizedURL(center: location, radiusMeters: 800)
+            
+            guard let url = URL(string: optimizedURL) else {
+                throw BancAPIError.invalidURL
             }
             
-            // Créer le cluster
-            let centerCoordinate = calculateCenterCoordinate(for: clusterBancs)
-            clusters.append(BancCluster(
-                bancs: clusterBancs,
-                centerCoordinate: centerCoordinate
-            ))
+            print("🌐 URL générée: \(optimizedURL)")
+            print("🎯 Coordonnées: lat=\(location.latitude), lon=\(location.longitude)")
+            
+            let (data, response) = try await URLSession.shared.data(from: url)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw BancAPIError.invalidResponse
+            }
+            
+            print("📡 Status HTTP: \(httpResponse.statusCode)")
+            
+            guard httpResponse.statusCode == 200 else {
+                print("❌ Erreur HTTP \(httpResponse.statusCode), essai avec requête complète...")
+                await loadBancsFromAPIFallback(around: location)
+                return
+            }
+            
+            let geoJsonResponse = try JSONDecoder().decode(BancGeoJSONResponse.self, from: data)
+            
+            print("📊 Features reçues: \(geoJsonResponse.features.count)")
+            
+            // ✅ SI PAS DE RÉSULTATS AVEC BBOX, ESSAYER SANS BBOX
+            if geoJsonResponse.features.isEmpty {
+                print("⚠️ Aucun résultat avec BBOX, essai sans filtrage...")
+                await loadBancsFromAPIFallback(around: location)
+                return
+            }
+            
+            let bancLocations = geoJsonResponse.features.compactMap { feature -> BancLocation? in
+                guard feature.geometry.coordinates.count >= 2 else { return nil }
+                
+                let longitude = feature.geometry.coordinates[0]
+                let latitude = feature.geometry.coordinates[1]
+                let props = feature.properties
+                
+                return BancLocation(
+                    coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                    name: props.nom ?? "Banc public",
+                    address: formatAddress(props),
+                    gestionnaire: props.gestionnaire ?? "Non spécifié",
+                    isAccessible: props.acces_pmr == "Oui",
+                    hasShadow: props.ombrage == "Oui",
+                    materiau: props.materiau
+                )
+            }
+            
+            print("🏗️ Bancs créés: \(bancLocations.count)")
+            
+            // ✅ Trier par distance et limiter
+            let sortedBancs = bancLocations
+                .map { banc in
+                    let distance = location.distance(to: banc.coordinate)
+                    return (banc: banc, distance: distance)
+                }
+                .sorted { $0.distance < $1.distance }
+                .map { $0.banc }
+            
+            let limitedBancs = Array(sortedBancs.prefix(maxBancsToShow))
+            
+            // ✅ Mettre en cache
+            let zoneKey = generateZoneKey(for: location)
+            zoneCache[zoneKey] = CachedZone(
+                bancs: sortedBancs,
+                timestamp: Date(),
+                centerLocation: location
+            )
+            
+            nearbyBancs = limitedBancs
+            isLoading = false
+            
+            print("✅ \(limitedBancs.count) bancs chargés et triés par distance")
+            
+        } catch {
+            errorMessage = "Erreur de chargement: \(error.localizedDescription)"
+            isLoading = false
+            print("❌ Erreur chargement bancs: \(error)")
+            
+            // ✅ ESSAYER EN FALLBACK SI ERREUR
+            print("🔄 Tentative de fallback...")
+            await loadBancsFromAPIFallback(around: location)
+        }
+    }
+    
+    // ✅ MÉTHODE FALLBACK SANS BBOX
+    private func loadBancsFromAPIFallback(around location: CLLocationCoordinate2D) async {
+        do {
+            let fallbackURL = "https://data.grandlyon.com/geoserver/metropole-de-lyon/ows?SERVICE=WFS&VERSION=2.0.0&request=GetFeature&typename=metropole-de-lyon:adr_voie_lieu.adrbanc_latest&outputFormat=application/json&SRSNAME=EPSG:4171&startIndex=0&sortby=gid"
+            
+            guard let url = URL(string: fallbackURL) else {
+                throw BancAPIError.invalidURL
+            }
+            
+            print("🔄 Fallback: chargement de tous les bancs...")
+            
+            let (data, response) = try await URLSession.shared.data(from: url)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw BancAPIError.invalidResponse
+            }
+            
+            guard httpResponse.statusCode == 200 else {
+                throw BancAPIError.httpError(httpResponse.statusCode)
+            }
+            
+            let geoJsonResponse = try JSONDecoder().decode(BancGeoJSONResponse.self, from: data)
+            
+            print("📊 Total bancs reçus (fallback): \(geoJsonResponse.features.count)")
+            
+            let allBancLocations = geoJsonResponse.features.compactMap { feature -> BancLocation? in
+                guard feature.geometry.coordinates.count >= 2 else { return nil }
+                
+                let longitude = feature.geometry.coordinates[0]
+                let latitude = feature.geometry.coordinates[1]
+                let props = feature.properties
+                
+                return BancLocation(
+                    coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                    name: props.nom ?? "Banc public",
+                    address: formatAddress(props),
+                    gestionnaire: props.gestionnaire ?? "Non spécifié",
+                    isAccessible: props.acces_pmr == "Oui",
+                    hasShadow: props.ombrage == "Oui",
+                    materiau: props.materiau
+                )
+            }
+            
+            // ✅ METTRE À JOUR LE CACHE GLOBAL
+            Self.globalBancsCache = allBancLocations
+            Self.globalCacheTimestamp = Date()
+            
+            print("🌍 Cache global mis à jour avec \(allBancLocations.count) bancs")
+            
+            // ✅ Filtrer par distance côté client (rayon 800m)
+            let nearbyBancLocations = allBancLocations
+                .map { banc in
+                    let distance = location.distance(to: banc.coordinate)
+                    return (banc: banc, distance: distance)
+                }
+                .filter { $0.distance <= 800 } // ✅ Rayon de 800m
+                .sorted { $0.distance < $1.distance }
+                .map { $0.banc }
+            
+            let limitedBancs = Array(nearbyBancLocations.prefix(maxBancsToShow))
+            
+            // ✅ Mettre en cache
+            let zoneKey = generateZoneKey(for: location)
+            zoneCache[zoneKey] = CachedZone(
+                bancs: nearbyBancLocations,
+                timestamp: Date(),
+                centerLocation: location
+            )
+            
+            nearbyBancs = limitedBancs
+            isLoading = false
+            
+            print("✅ Fallback réussi: \(limitedBancs.count) bancs proches trouvés")
+            
+        } catch {
+            errorMessage = "Erreur de chargement (fallback): \(error.localizedDescription)"
+            isLoading = false
+            print("❌ Erreur fallback: \(error)")
+        }
+    }
+    
+    // ✅ CONSTRUCTION D'URL AVEC BBOX POUR FILTRER GÉOGRAPHIQUEMENT (DEBUG)
+    private func buildOptimizedURL(center: CLLocationCoordinate2D, radiusMeters: Double) -> String {
+        let bbox = calculateBoundingBox(center: center, radiusMeters: radiusMeters)
+        
+        print("🧮 BBOX calculé: \(bbox)")
+        
+        let baseURL = "https://data.grandlyon.com/geoserver/metropole-de-lyon/ows"
+        let params = [
+            "SERVICE=WFS",
+            "VERSION=2.0.0",
+            "request=GetFeature",
+            "typename=metropole-de-lyon:adr_voie_lieu.adrbanc_latest",
+            "outputFormat=application/json",
+            "SRSNAME=EPSG:4171",
+            "BBOX=\(bbox)",
+            "maxFeatures=100" // ✅ Augmenté pour avoir plus de choix dans la zone
+        ].joined(separator: "&")
+        
+        let fullURL = "\(baseURL)?\(params)"
+        print("🔗 URL complète: \(fullURL)")
+        
+        return fullURL
+    }
+    
+    // ✅ CALCUL DE BOUNDING BOX (AMÉLIORÉ)
+    private func calculateBoundingBox(center: CLLocationCoordinate2D, radiusMeters: Double) -> String {
+        // Conversion plus précise mètres -> degrés
+        let metersPerDegreeLat = 111000.0
+        let metersPerDegreeLon = 111000.0 * cos(center.latitude * .pi / 180)
+        
+        let deltaLat = radiusMeters / metersPerDegreeLat
+        let deltaLon = radiusMeters / metersPerDegreeLon
+        
+        let minLon = center.longitude - deltaLon
+        let minLat = center.latitude - deltaLat
+        let maxLon = center.longitude + deltaLon
+        let maxLat = center.latitude + deltaLat
+        
+        print("🌍 Centre: (\(center.latitude), \(center.longitude))")
+        print("📐 Deltas: lat=\(deltaLat), lon=\(deltaLon)")
+        print("📦 Bounds: minLat=\(minLat), minLon=\(minLon), maxLat=\(maxLat), maxLon=\(maxLon)")
+        
+        return "\(minLon),\(minLat),\(maxLon),\(maxLat)"
+    }
+    
+    // ✅ GÉNÉRATION DE CLÉ DE ZONE
+    private func generateZoneKey(for location: CLLocationCoordinate2D) -> String {
+        let gridSize = 0.01 // ~1km de grille
+        let gridLat = Int(location.latitude / gridSize)
+        let gridLon = Int(location.longitude / gridSize)
+        return "zone_\(gridLat)_\(gridLon)"
+    }
+    
+    private func formatAddress(_ props: BancProperties) -> String {
+        var addressParts: [String] = []
+        
+        if let adresse = props.adresse {
+            addressParts.append(adresse)
         }
         
-        cachedClusters = clusters
-
-        return clusters
-    }
-    
-    private var cachedClusters: [BancCluster] = []
-    
-    func updateClustering() {
-        // Force la mise à jour au prochain appel
-        lastClusterTime = Date.distantPast
-    }
-    
-    private func calculateClusterDistance(for region: MKCoordinateRegion) -> Double {
-        // Distance de clustering adaptée au niveau de zoom
-        // Plus on est zoomé, plus la distance de clustering est petite
-        let baseDistance = 200.0 // 200 mètres de base
-        let zoomFactor = region.span.latitudeDelta / 0.01 // Facteur basé sur le span
-        
-        return baseDistance * max(0.1, zoomFactor)
-    }
-    
-    private func calculateCenterCoordinate(for bancs: [BancLocation]) -> CLLocationCoordinate2D {
-        guard !bancs.isEmpty else {
-            return CLLocationCoordinate2D(latitude: 0, longitude: 0)
+        if let codePostal = props.code_postal {
+            addressParts.append(codePostal)
         }
         
-        let totalLat = bancs.reduce(0) { $0 + $1.coordinate.latitude }
-        let totalLon = bancs.reduce(0) { $0 + $1.coordinate.longitude }
+        if let commune = props.commune {
+            addressParts.append(commune)
+        }
         
-        return CLLocationCoordinate2D(
-            latitude: totalLat / Double(bancs.count),
-            longitude: totalLon / Double(bancs.count)
-        )
+        return addressParts.isEmpty ? "Adresse non disponible" : addressParts.joined(separator: ", ")
     }
 }
 
-// MARK: - ✅ MODÈLES POUR LE CLUSTERING
-struct BancCluster: Identifiable {
-    let id = UUID()
-    let bancs: [BancLocation]
-    let centerCoordinate: CLLocationCoordinate2D
-}
-
-// MARK: - ✅ EXTENSIONS POUR LE CLUSTERING
-extension CLLocationCoordinate2D {
-    func distance(to coordinate: CLLocationCoordinate2D) -> Double {
-        let location1 = CLLocation(latitude: self.latitude, longitude: self.longitude)
-        let location2 = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-        return location1.distance(from: location2)
-    }
-}
-
-// ✅ EXTENSION POUR RENDRE MKCoordinateRegion EQUATABLE
-extension MKCoordinateRegion: Equatable {
-    public static func == (lhs: MKCoordinateRegion, rhs: MKCoordinateRegion) -> Bool {
-        return abs(lhs.center.latitude - rhs.center.latitude) < 0.000001 &&
-               abs(lhs.center.longitude - rhs.center.longitude) < 0.000001 &&
-               abs(lhs.span.latitudeDelta - rhs.span.latitudeDelta) < 0.000001 &&
-               abs(lhs.span.longitudeDelta - rhs.span.longitudeDelta) < 0.000001
-    }
-}
-
-// MARK: - Modèles nécessaires (utilise ceux de ToiletsMapView pour éviter les conflits)
-
-// MARK: - ✅ NOUVELLE SECTION - Bancs les plus proches
+// MARK: - ✅ SECTION BANCS PROCHES AMÉLIORÉE
 struct NearestBancsView: View {
     let bancs: [BancLocation]
-    let userLocation: CLLocationCoordinate2D
+    let referenceLocation: CLLocationCoordinate2D
+    let isSearchMode: Bool
     let themeColor: Color
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // En-tête SANS ICÔNE
             HStack {
-                Text("Bancs les plus proches")
+                Text(isSearchMode ? "Bancs proches de votre recherche" : "Bancs les plus proches")
                     .font(.headline)
                     .foregroundColor(.primary)
                 
                 Spacer()
+                
+                if isSearchMode {
+                    Text("")
+                        .font(.title2)
+                } else {
+                    Text("")
+                        .font(.title2)
+                }
             }
             .padding(.horizontal)
             .padding(.top)
             
-            // Liste des 3 bancs
             VStack(spacing: 8) {
                 ForEach(bancs) { banc in
                     NearestBancRowView(
                         banc: banc,
-                        userLocation: userLocation,
+                        referenceLocation: referenceLocation,
                         themeColor: themeColor
                     )
                 }
@@ -620,14 +807,14 @@ struct NearestBancsView: View {
 
 struct NearestBancRowView: View {
     let banc: BancLocation
-    let userLocation: CLLocationCoordinate2D
+    let referenceLocation: CLLocationCoordinate2D
     let themeColor: Color
     @State private var showNavigationAlert = false
     
     private var distance: String {
-        let userCLLocation = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
+        let referenceCLLocation = CLLocation(latitude: referenceLocation.latitude, longitude: referenceLocation.longitude)
         let bancLocation = CLLocation(latitude: banc.coordinate.latitude, longitude: banc.coordinate.longitude)
-        let distanceInMeters = userCLLocation.distance(from: bancLocation)
+        let distanceInMeters = referenceCLLocation.distance(from: bancLocation)
         
         if distanceInMeters < 1000 {
             return "\(Int(distanceInMeters))m"
@@ -641,14 +828,12 @@ struct NearestBancRowView: View {
             showNavigationAlert = true
         }) {
             HStack(spacing: 12) {
-                // Icône Banc AGRANDIE x2 (48px au lieu de 24px)
                 Image("Banc")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 48, height: 48)
                     .foregroundColor(themeColor)
                 
-                // Informations banc - UNIQUEMENT L'ADRESSE
                 VStack(alignment: .leading, spacing: 4) {
                     Text(banc.address)
                         .font(.body)
@@ -657,7 +842,6 @@ struct NearestBancRowView: View {
                         .multilineTextAlignment(.leading)
                         .lineLimit(2)
                     
-                    // Badges statut
                     HStack(spacing: 8) {
                         if banc.isAccessible {
                             Text("♿ Accessible")
@@ -683,7 +867,6 @@ struct NearestBancRowView: View {
                 
                 Spacer()
                 
-                // Distance et icône navigation
                 VStack(spacing: 8) {
                     Text(distance)
                         .font(.caption)
@@ -717,7 +900,7 @@ struct NearestBancRowView: View {
         let placemark = MKPlacemark(coordinate: coordinate)
         let mapItem = MKMapItem(placemark: placemark)
         
-        mapItem.name = banc.address // Utilise l'adresse comme nom
+        mapItem.name = banc.address
         
         let launchOptions: [String: Any] = [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking,
@@ -726,29 +909,34 @@ struct NearestBancRowView: View {
         
         mapItem.openInMaps(launchOptions: launchOptions)
         
-        print("🧭 Navigation à pied lancée vers: \(banc.address) (\(coordinate.latitude), \(coordinate.longitude))")
+        print("🧭 Navigation à pied lancée vers: \(banc.address)")
     }
 }
 
-// MARK: - Composants UI avec couleur uniforme
+// MARK: - Composants UI optimisés
 
 struct BancMapBoxView: View {
     @Binding var region: MKCoordinateRegion
     let bancs: [BancLocation]
-    let clusteredAnnotations: [BancMapAnnotationItem]
+    let mapAnnotations: [BancMapAnnotationItem]
     let userLocation: CLLocationCoordinate2D?
     let searchedLocation: CLLocationCoordinate2D?
     let isLoading: Bool
+    let isSearchMode: Bool
     let themeColor: Color
-    let onClusterTapped: (BancCluster) -> Void
     
     var body: some View {
         VStack(spacing: 0) {
-            // ✅ En-tête avec nombre de bancs et bouton "Ma position"
             HStack {
-                Text("Carte des bancs (\(bancs.count))")
-                    .font(.headline)
-                    .foregroundColor(.primary)
+                if isSearchMode {
+                    Text("Bancs autour de votre recherche (\(bancs.count))")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                } else {
+                    Text("Bancs autour de vous (\(bancs.count))")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                }
                 
                 Spacer()
                 
@@ -760,11 +948,14 @@ struct BancMapBoxView: View {
                     }
                     
                     Button(action: {
-                        centerOnUserLocation()
+                        centerOnCurrentFocus()
                     }) {
                         HStack(spacing: 4) {
                             Group {
-                                if userLocation != nil {
+                                if isSearchMode {
+                                    Image(systemName: "mappin.and.ellipse")
+                                        .foregroundColor(.blue)
+                                } else if userLocation != nil {
                                     Image(systemName: "location.fill")
                                         .foregroundColor(.green)
                                 } else {
@@ -773,10 +964,10 @@ struct BancMapBoxView: View {
                                 }
                             }
                             
-                            Text("Ma position")
+                            Text(isSearchMode ? "Recherche" : "Ma position")
                                 .font(.caption)
                         }
-                        .foregroundColor(userLocation != nil ? .green : .orange)
+                        .foregroundColor(isSearchMode ? .blue : (userLocation != nil ? .green : .orange))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(themeColor.opacity(0.1))
@@ -791,27 +982,12 @@ struct BancMapBoxView: View {
             .padding()
             .background(themeColor.opacity(0.2))
             
-            // ✅ Map avec annotations clusterisées
             Map(coordinateRegion: $region,
                 interactionModes: [.pan, .zoom],
                 showsUserLocation: true,
-                annotationItems: clusteredAnnotations) { annotation in
+                annotationItems: mapAnnotations) { annotation in
                 MapAnnotation(coordinate: annotation.coordinate) {
-                    if annotation.isCluster {
-                        BancClusterMarkerView(
-                            count: annotation.clusterCount,
-                            bancs: annotation.clusterBancs,
-                            themeColor: themeColor,
-                            onTapped: {
-                                let cluster = BancCluster(
-                                    bancs: annotation.clusterBancs,
-                                    centerCoordinate: annotation.coordinate
-                                )
-                                onClusterTapped(cluster)
-                            }
-                        )
-                        .id("cluster-\(annotation.id)")
-                    } else if let banc = annotation.banc {
+                    if let banc = annotation.banc {
                         BancMarkerView(banc: banc, themeColor: themeColor)
                             .id("banc-\(banc.id)")
                     } else if annotation.isSearchResult {
@@ -820,182 +996,33 @@ struct BancMapBoxView: View {
                     }
                 }
             }
-            .frame(height: 350) // ✅ Réduit la hauteur pour faire de la place
+            .frame(height: 350)
         }
         .background(Color(.systemBackground))
         .cornerRadius(16)
         .shadow(color: themeColor.opacity(0.3), radius: 8, x: 0, y: 4)
     }
     
-    // ✅ Fonction pour centrer sur la position utilisateur
-    private func centerOnUserLocation() {
-        guard let userLocation = userLocation else {
-            print("🔄 Position utilisateur non disponible")
+    private func centerOnCurrentFocus() {
+        let targetLocation: CLLocationCoordinate2D?
+        
+        if isSearchMode, let searchLocation = searchedLocation {
+            targetLocation = searchLocation
+        } else {
+            targetLocation = userLocation
+        }
+        
+        guard let location = targetLocation else {
+            print("🔄 Aucune position disponible pour le centrage")
             return
         }
         
         withAnimation(.easeInOut(duration: 0.5)) {
-            region.center = userLocation
-            region.span = MKCoordinateSpan(latitudeDelta: 0.009, longitudeDelta: 0.009)
+            region.center = location
+            region.span = MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
         }
         
-        print("🎯 Carte centrée sur position utilisateur")
-    }
-}
-
-// MARK: - ✅ NOUVEAU MARQUEUR DE CLUSTER
-struct BancClusterMarkerView: View {
-    let count: Int
-    let bancs: [BancLocation]
-    let themeColor: Color
-    let onTapped: () -> Void
-    
-    var body: some View {
-        Button(action: onTapped) {
-            ZStack {
-                // Cercle de fond avec dégradé
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            gradient: Gradient(colors: [
-                                themeColor.opacity(0.8),
-                                themeColor
-                            ]),
-                            center: .center,
-                            startRadius: 5,
-                            endRadius: 20
-                        )
-                    )
-                    .frame(width: 40, height: 40)
-                    .shadow(color: .black.opacity(0.3), radius: 3, x: 1, y: 1)
-                
-                // Bordure blanche
-                Circle()
-                    .stroke(Color.white, lineWidth: 2)
-                    .frame(width: 40, height: 40)
-                
-                // Nombre de bancs
-                Text("\(count)")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
-            }
-        }
-        .scaleEffect(1.1)
-    }
-}
-
-// MARK: - ✅ VUE DÉTAIL DU CLUSTER
-struct BancClusterDetailView: View {
-    let bancs: [BancLocation]
-    let themeColor: Color
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(bancs) { banc in
-                        BancClusterRowView(banc: banc, themeColor: themeColor)
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("Bancs dans cette zone")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarItems(trailing: Button("Fermer") {
-                dismiss()
-            })
-        }
-    }
-}
-
-struct BancClusterRowView: View {
-    let banc: BancLocation
-    let themeColor: Color
-    @State private var showNavigationAlert = false
-    
-    var body: some View {
-        Button(action: {
-            showNavigationAlert = true
-        }) {
-            HStack(spacing: 12) {
-                // Icône Banc
-                Image("Banc")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 32, height: 32)
-                    .foregroundColor(themeColor)
-                
-                // Informations banc
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(banc.address)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
-                    
-                    // Badges
-                    HStack(spacing: 6) {
-                        if banc.isAccessible {
-                            Text("♿")
-                                .font(.caption)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 2)
-                                .background(Color.green.opacity(0.2))
-                                .cornerRadius(4)
-                        }
-                        
-                        if banc.hasShadow {
-                            Text("🌳")
-                                .font(.caption)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 2)
-                                .background(Color.blue.opacity(0.2))
-                                .cornerRadius(4)
-                        }
-                    }
-                }
-                
-                Spacer()
-                
-                // Icône navigation
-                Image(systemName: "location.north.fill")
-                    .font(.system(size: 14))
-                    .foregroundColor(.white)
-                    .frame(width: 28, height: 28)
-                    .background(themeColor)
-                    .clipShape(Circle())
-            }
-        }
-        .padding()
-        .background(Color(.systemGray6).opacity(0.5))
-        .cornerRadius(12)
-        .alert("Navigation", isPresented: $showNavigationAlert) {
-            Button("Ouvrir dans Plans") {
-                openNavigationToBanc()
-            }
-            Button("Annuler", role: .cancel) { }
-        } message: {
-            Text("Voulez-vous ouvrir la navigation vers ce banc ?")
-        }
-    }
-    
-    private func openNavigationToBanc() {
-        let coordinate = banc.coordinate
-        let placemark = MKPlacemark(coordinate: coordinate)
-        let mapItem = MKMapItem(placemark: placemark)
-        
-        mapItem.name = banc.address
-        
-        let launchOptions: [String: Any] = [
-            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking,
-            MKLaunchOptionsShowsTrafficKey: false
-        ]
-        
-        mapItem.openInMaps(launchOptions: launchOptions)
-        
-        print("🧭 Navigation lancée vers: \(banc.address)")
+        print("🎯 Carte centrée sur \(isSearchMode ? "recherche" : "position utilisateur")")
     }
 }
 
@@ -1004,43 +1031,24 @@ struct BancMapAnnotationItem: Identifiable {
     let banc: BancLocation?
     let coordinate: CLLocationCoordinate2D
     let isSearchResult: Bool
-    let isCluster: Bool
-    let clusterCount: Int
-    let clusterBancs: [BancLocation]
-    let clusterId: UUID?
     
-    init(banc: BancLocation?, coordinate: CLLocationCoordinate2D, isSearchResult: Bool, isCluster: Bool = false, clusterCount: Int = 0, clusterBancs: [BancLocation] = [], clusterId: UUID? = nil) {
+    init(banc: BancLocation?, coordinate: CLLocationCoordinate2D, isSearchResult: Bool) {
         self.banc = banc
         self.coordinate = coordinate
         self.isSearchResult = isSearchResult
-        self.isCluster = isCluster
-        self.clusterCount = clusterCount
-        self.clusterBancs = clusterBancs
-        self.clusterId = clusterId
-    }
-    
-    var stableId: String {
-        if isCluster {
-            return "cluster-\(coordinate.latitude)-\(coordinate.longitude)-\(clusterCount)"
-        } else if let banc = banc {
-            return "banc-\(banc.id)"
-        } else if isSearchResult {
-            return "search-pin"
-        } else {
-            return "unknown-\(id)"
-        }
     }
 }
 
-// MARK: - Composants UI spécifiques aux bancs (évite les conflits avec ToiletsMapView)
+// MARK: - Composants UI spécifiques aux bancs
 
 struct BancSmartSearchBarView: View {
     @Binding var searchText: String
-    let suggestions: [AddressSuggestion]
+    let suggestions: [BancAddressSuggestion]
     @Binding var showSuggestions: Bool
     let onSearchTextChanged: (String) -> Void
-    let onSuggestionTapped: (AddressSuggestion) -> Void
+    let onSuggestionTapped: (BancAddressSuggestion) -> Void
     let onSearchSubmitted: () -> Void
+    let onClearSearch: () -> Void
     let themeColor: Color
     
     @FocusState private var isSearchFocused: Bool
@@ -1063,12 +1071,12 @@ struct BancSmartSearchBarView: View {
                 }
             
             if !searchText.isEmpty {
-                Button("Annuler") {
-                    searchText = ""
-                    showSuggestions = false
-                    isSearchFocused = false
+                Button("✕") {
+                    onClearSearch()
                 }
                 .foregroundColor(themeColor)
+                .font(.caption)
+                .padding(.horizontal, 4)
             }
         }
         .padding()
@@ -1090,8 +1098,8 @@ struct BancSmartSearchBarView: View {
 }
 
 struct BancSuggestionsListView: View {
-    let suggestions: [AddressSuggestion]
-    let onSuggestionTapped: (AddressSuggestion) -> Void
+    let suggestions: [BancAddressSuggestion]
+    let onSuggestionTapped: (BancAddressSuggestion) -> Void
     
     var body: some View {
         VStack(spacing: 0) {
@@ -1141,7 +1149,7 @@ struct BancLoadingOverlayView: View {
                     .scaleEffect(1.5)
                     .tint(themeColor)
                 
-                Text("Chargement des bancs...")
+                Text("Chargement des bancs proches...")
                     .font(.headline)
                     .foregroundColor(.primary)
             }
@@ -1201,7 +1209,6 @@ struct BancErrorOverlayView: View {
     }
 }
 
-// ✅ MARQUEUR MODIFIÉ - ICÔNE SEULE SANS BACKGROUND
 struct BancMarkerView: View {
     let banc: BancLocation
     let themeColor: Color
@@ -1211,29 +1218,12 @@ struct BancMarkerView: View {
         Button(action: {
             showNavigationAlert = true
         }) {
-            ZStack {
-                // ✅ PLUS DE BACKGROUND CIRCULAIRE - JUSTE L'ICÔNE
-                Image("Banc")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 28, height: 28)
-                    .foregroundColor(themeColor)
-                    .shadow(color: .black.opacity(0.3), radius: 2, x: 1, y: 1) // Ombre pour la visibilité
-                
-                // Bordure verte si accessible (autour de l'icône)
-                if banc.isAccessible {
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.green, lineWidth: 2)
-                        .frame(width: 32, height: 32)
-                }
-                
-                // Bordure bleue si ombragé (autour de l'icône)
-                if banc.hasShadow {
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.blue, lineWidth: 2)
-                        .frame(width: 34, height: 34)
-                }
-            }
+            Image("Banc")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 28, height: 28)
+                .foregroundColor(themeColor)
+                .shadow(color: .black.opacity(0.3), radius: 2, x: 1, y: 1)
         }
         .alert("Navigation", isPresented: $showNavigationAlert) {
             Button("Ouvrir dans Plans") {
@@ -1251,7 +1241,6 @@ struct BancMarkerView: View {
         let mapItem = MKMapItem(placemark: placemark)
         
         mapItem.name = banc.name
-        mapItem.phoneNumber = nil
         
         let launchOptions: [String: Any] = [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking,
@@ -1260,7 +1249,7 @@ struct BancMarkerView: View {
         
         mapItem.openInMaps(launchOptions: launchOptions)
         
-        print("🧭 Navigation lancée vers: \(banc.name) (\(coordinate.latitude), \(coordinate.longitude))")
+        print("🧭 Navigation lancée vers: \(banc.name)")
     }
 }
 
@@ -1295,82 +1284,7 @@ struct BancSearchPinMarker: View {
     }
 }
 
-// MARK: - Service API et modèles (inchangés)
-
-@MainActor
-class BancAPIService: ObservableObject {
-    @Published var bancs: [BancLocation] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-    
-    private let apiURL = "https://data.grandlyon.com/geoserver/metropole-de-lyon/ows?SERVICE=WFS&VERSION=2.0.0&request=GetFeature&typename=metropole-de-lyon:adr_voie_lieu.adrbanc_latest&outputFormat=application/json&SRSNAME=EPSG:4171&startIndex=0&sortby=gid"
-    
-    func loadBancs() async {
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            guard let url = URL(string: apiURL) else {
-                throw BancAPIError.invalidURL
-            }
-            
-            let (data, response) = try await URLSession.shared.data(from: url)
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw BancAPIError.invalidResponse
-            }
-            
-            guard httpResponse.statusCode == 200 else {
-                throw BancAPIError.httpError(httpResponse.statusCode)
-            }
-            
-            let geoJsonResponse = try JSONDecoder().decode(BancGeoJSONResponse.self, from: data)
-            
-            let bancLocations = geoJsonResponse.features.compactMap { feature -> BancLocation? in
-                guard feature.geometry.coordinates.count >= 2 else { return nil }
-                
-                let longitude = feature.geometry.coordinates[0]
-                let latitude = feature.geometry.coordinates[1]
-                let props = feature.properties
-                
-                return BancLocation(
-                    coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
-                    name: props.nom ?? "Banc public",
-                    address: formatAddress(props),
-                    gestionnaire: props.gestionnaire ?? "Non spécifié",
-                    isAccessible: props.acces_pmr == "Oui",
-                    hasShadow: props.ombrage == "Oui",
-                    materiau: props.materiau
-                )
-            }
-            
-            bancs = bancLocations
-            isLoading = false
-            
-        } catch {
-            errorMessage = "Erreur de chargement: \(error.localizedDescription)"
-            isLoading = false
-        }
-    }
-    
-    private func formatAddress(_ props: BancProperties) -> String {
-        var addressParts: [String] = []
-        
-        if let adresse = props.adresse {
-            addressParts.append(adresse)
-        }
-        
-        if let codePostal = props.code_postal {
-            addressParts.append(codePostal)
-        }
-        
-        if let commune = props.commune {
-            addressParts.append(commune)
-        }
-        
-        return addressParts.isEmpty ? "Adresse non disponible" : addressParts.joined(separator: ", ")
-    }
-}
+// MARK: - Modèles de données
 
 struct BancLocation: Identifiable {
     let id = UUID()
@@ -1412,6 +1326,14 @@ struct BancProperties: Codable {
     let materiau: String?
 }
 
+// MARK: - Modèle local pour éviter les conflits
+struct BancAddressSuggestion: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let coordinate: CLLocationCoordinate2D
+}
+
 enum BancAPIError: Error, LocalizedError {
     case invalidURL
     case invalidResponse
@@ -1426,6 +1348,25 @@ enum BancAPIError: Error, LocalizedError {
         case .httpError(let code):
             return "Erreur HTTP \(code)"
         }
+    }
+}
+
+// MARK: - Extensions pour les calculs de distance
+
+extension CLLocationCoordinate2D {
+    func distance(to coordinate: CLLocationCoordinate2D) -> Double {
+        let location1 = CLLocation(latitude: self.latitude, longitude: self.longitude)
+        let location2 = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        return location1.distance(from: location2)
+    }
+}
+
+extension MKCoordinateRegion: Equatable {
+    public static func == (lhs: MKCoordinateRegion, rhs: MKCoordinateRegion) -> Bool {
+        return abs(lhs.center.latitude - rhs.center.latitude) < 0.000001 &&
+               abs(lhs.center.longitude - rhs.center.longitude) < 0.000001 &&
+               abs(lhs.span.latitudeDelta - rhs.span.latitudeDelta) < 0.000001 &&
+               abs(lhs.span.longitudeDelta - rhs.span.longitudeDelta) < 0.000001
     }
 }
 

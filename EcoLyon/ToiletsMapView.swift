@@ -133,7 +133,14 @@ struct ToiletsMapView: View {
             FixedBottomMenuView(
                 isMenuExpanded: $navigationManager.isMenuExpanded,
                 showToiletsMap: $navigationManager.showToiletsMap,  // ✅ CORRIGÉ
-                showBancsMap: $navigationManager.showBancsMap,      // ✅ CORRIGÉ
+                showBancsMap: $navigationManager.showBancsMap,
+                showFontainesMap: $navigationManager.showFontainesMap, 
+                showSilosMap: $navigationManager.showSilosMap,
+                showBornesMap: $navigationManager.showBornesMap,
+                showCompostMap: $navigationManager.showCompostMap,
+                showParcsMap: $navigationManager.showParcsMap,
+                showPoubelleMap: $navigationManager.showPoubelleMap,
+                showRandosMap: $navigationManager.showRandosMap,// ✅ CORRIGÉ
                 onHomeSelected: {
                     navigationManager.navigateToHome()  // ✅ CORRIGÉ
                 },

@@ -2,16 +2,16 @@ import SwiftUI
 import MapKit
 import Foundation
 
-// MARK: - SilosMapView ultra-optimisé avec filtrage géographique
-struct SilosMapView: View {
-    @StateObject private var silosService = OptimizedSilosAPIService()
+// MARK: - CompostMapView ultra-optimisé avec filtrage géographique
+struct CompostMapView: View {
+    @StateObject private var compostService = OptimizedCompostAPIService()
     @StateObject private var locationService = GlobalLocationService.shared
     @StateObject private var navigationManager = NavigationManager.shared
     
     // ✅ Region initialisée avec position utilisateur, zoom serré
     @State private var region: MKCoordinateRegion
     @State private var searchText = ""
-    @State private var addressSuggestions: [SilosAddressSuggestion] = []
+    @State private var addressSuggestions: [CompostAddressSuggestion] = []
     @State private var showSuggestions = false
     @State private var searchedLocation: CLLocationCoordinate2D?
     
@@ -20,8 +20,8 @@ struct SilosMapView: View {
     @State private var isSearchMode = false
     @State private var showInfoModal = false // ✅ Nouvelle variable pour la bulle info
     
-    // ✅ COULEUR UNIFIÉE SILOS
-    private let silosThemeColor = Color(red: 0.5, green: 0.7, blue: 0.7)
+    // ✅ COULEUR UNIFIÉE COMPOST
+    private let compostThemeColor = Color(red: 0.5, green: 0.35, blue: 0.25)
     
     // ✅ Location actuelle à utiliser (utilisateur ou recherche)
     private var currentFocusLocation: CLLocationCoordinate2D? {
@@ -31,33 +31,33 @@ struct SilosMapView: View {
         return locationService.userLocation
     }
     
-    // ✅ Computed property pour les silos proches du focus actuel
-    private var nearbySilos: [SilosLocation] {
-        return silosService.nearbySilos
+    // ✅ Computed property pour les bornes proches du focus actuel
+    private var nearbyCompostBins: [CompostLocation] {
+        return compostService.nearbyCompostBins
     }
     
-    // ✅ Computed property pour les 3 silos les plus proches (section)
-    private var topThreeSilos: [SilosLocation] {
-        return Array(nearbySilos.prefix(3))
+    // ✅ Computed property pour les 3 bornes les plus proches (section)
+    private var topThreeCompostBins: [CompostLocation] {
+        return Array(nearbyCompostBins.prefix(3))
     }
     
     // ✅ Computed property pour les annotations
-    private var mapAnnotations: [SilosMapAnnotationItem] {
-        var annotations: [SilosMapAnnotationItem] = []
+    private var mapAnnotations: [CompostMapAnnotationItem] {
+        var annotations: [CompostMapAnnotationItem] = []
         
-        // Afficher les silos proches
-        for silo in nearbySilos {
-            annotations.append(SilosMapAnnotationItem(
-                silo: silo,
-                coordinate: silo.coordinate,
+        // Afficher les bornes proches
+        for bin in nearbyCompostBins {
+            annotations.append(CompostMapAnnotationItem(
+                compostBin: bin,
+                coordinate: bin.coordinate,
                 isSearchResult: false
             ))
         }
         
         // Ajouter le pin de recherche si présent
         if let searchedLocation = searchedLocation {
-            annotations.append(SilosMapAnnotationItem(
-                silo: nil,
+            annotations.append(CompostMapAnnotationItem(
+                compostBin: nil,
                 coordinate: searchedLocation,
                 isSearchResult: true
             ))
@@ -71,10 +71,10 @@ struct SilosMapView: View {
         let initialCenter: CLLocationCoordinate2D
         if let userLocation = GlobalLocationService.shared.userLocation {
             initialCenter = userLocation
-            print("🎯 Silos: Initialisation avec position utilisateur")
+            print("🎯 Compost: Initialisation avec position utilisateur")
         } else {
             initialCenter = CLLocationCoordinate2D(latitude: 45.7640, longitude: 4.8357)
-            print("🏛️ Silos: Initialisation avec Bellecour (fallback)")
+            print("🏛️ Compost: Initialisation avec Bellecour (fallback)")
         }
         
         _region = State(initialValue: MKCoordinateRegion(
@@ -89,15 +89,15 @@ struct SilosMapView: View {
                 VStack(spacing: 0) {
                     // ✅ TITRE FIXE EN HAUT AVEC BOUTON INFO
                     HStack(spacing: 12) {
-                        Image("Silos")
+                        Image("Compost")
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 50, height: 50)
-                            .foregroundColor(silosThemeColor)
+                            .foregroundColor(compostThemeColor)
                         
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 8) {
-                                Text("Silos à Verre")
+                                Text("Bornes à Compost")
                                     .font(.system(size: 24, weight: .bold))
                                     .foregroundColor(.primary)
                                 
@@ -109,7 +109,7 @@ struct SilosMapView: View {
                                 }) {
                                     Image(systemName: "info.circle")
                                         .font(.system(size: 18))
-                                        .foregroundColor(silosThemeColor)
+                                        .foregroundColor(compostThemeColor)
                                 }
                             }
                             
@@ -133,18 +133,18 @@ struct SilosMapView: View {
                     // ✅ PETITE BULLE D'INFO
                     if showInfoModal {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("La carte renvoie les 50 silos les plus proches dans un rayon de 800m autour de l'utilisateur ou du point de recherche sur les 2 781 silos référencés.")
+                            Text("La carte renvoie les 50 bornes les plus proches dans un rayon de 800m autour de l'utilisateur ou du point de recherche sur les 2 701 bornes à compost référencées.")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.leading)
                         }
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
-                        .background(silosThemeColor.opacity(0.1))
+                        .background(compostThemeColor.opacity(0.1))
                         .cornerRadius(12)
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(silosThemeColor.opacity(0.3), lineWidth: 1)
+                                .stroke(compostThemeColor.opacity(0.3), lineWidth: 1)
                         )
                         .padding(.horizontal)
                         .padding(.bottom, 12)
@@ -153,7 +153,7 @@ struct SilosMapView: View {
                     
                     // ✅ Barre de recherche améliorée
                     VStack(spacing: 0) {
-                        SilosSmartSearchBarView(
+                        CompostSmartSearchBarView(
                             searchText: $searchText,
                             suggestions: addressSuggestions,
                             showSuggestions: $showSuggestions,
@@ -161,11 +161,11 @@ struct SilosMapView: View {
                             onSuggestionTapped: handleSuggestionTap,
                             onSearchSubmitted: handleSearchSubmitted,
                             onClearSearch: handleClearSearch,
-                            themeColor: silosThemeColor
+                            themeColor: compostThemeColor
                         )
                         
                         if showSuggestions && !addressSuggestions.isEmpty {
-                            SilosSuggestionsListView(
+                            CompostSuggestionsListView(
                                 suggestions: addressSuggestions,
                                 onSuggestionTapped: handleSuggestionTap
                             )
@@ -175,26 +175,26 @@ struct SilosMapView: View {
                     .padding(.bottom, 16)
                     
                     // ✅ Carte optimisée
-                    SilosMapBoxView(
+                    CompostMapBoxView(
                         region: $region,
-                        silos: nearbySilos,
+                        compostBins: nearbyCompostBins,
                         mapAnnotations: mapAnnotations,
                         userLocation: locationService.userLocation,
                         searchedLocation: searchedLocation,
-                        isLoading: silosService.isLoading,
+                        isLoading: compostService.isLoading,
                         isSearchMode: isSearchMode,
-                        themeColor: silosThemeColor
+                        themeColor: compostThemeColor
                     )
                     .padding(.horizontal)
                     .padding(.bottom, 16)
                     
-                    // ✅ Section des 3 silos les plus proches
-                    if !topThreeSilos.isEmpty {
-                        NearestSilosView(
-                            silos: topThreeSilos,
+                    // ✅ Section des 3 bornes les plus proches
+                    if !topThreeCompostBins.isEmpty {
+                        NearestCompostBinsView(
+                            compostBins: topThreeCompostBins,
                             referenceLocation: currentFocusLocation ?? region.center,
                             isSearchMode: isSearchMode,
-                            themeColor: silosThemeColor
+                            themeColor: compostThemeColor
                         )
                         .padding(.horizontal)
                         .padding(.bottom, 30)
@@ -231,11 +231,11 @@ struct SilosMapView: View {
                 onHomeSelected: {
                     navigationManager.navigateToHome()
                 },
-                themeColor: silosThemeColor
+                themeColor: compostThemeColor
             )
         }
         .onAppear {
-            navigationManager.currentDestination = "silos"
+            navigationManager.currentDestination = "compost"
             setupInitialLocation()
         }
         .onDisappear {
@@ -245,18 +245,18 @@ struct SilosMapView: View {
             if isReady, let location = locationService.userLocation, !isSearchMode {
                 centerMapOnLocation(location)
                 Task {
-                    await silosService.loadSilosAroundLocation(location)
+                    await compostService.loadCompostBinsAroundLocation(location)
                 }
             }
         }
         .overlay {
-            if silosService.isLoading && silosService.nearbySilos.isEmpty {
-                SilosLoadingOverlayView(themeColor: silosThemeColor)
+            if compostService.isLoading && compostService.nearbyCompostBins.isEmpty {
+                CompostLoadingOverlayView(themeColor: compostThemeColor)
             }
         }
         .overlay {
-            if let errorMessage = silosService.errorMessage {
-                SilosErrorOverlayView(message: errorMessage, themeColor: silosThemeColor) {
+            if let errorMessage = compostService.errorMessage {
+                CompostErrorOverlayView(message: errorMessage, themeColor: compostThemeColor) {
                     Task {
                         await refreshCurrentLocation()
                     }
@@ -281,7 +281,7 @@ struct SilosMapView: View {
         }
     }
     
-    private func handleSuggestionTap(_ suggestion: SilosAddressSuggestion) {
+    private func handleSuggestionTap(_ suggestion: CompostAddressSuggestion) {
         searchText = suggestion.title
         showSuggestions = false
         
@@ -290,9 +290,9 @@ struct SilosMapView: View {
         searchedLocation = suggestion.coordinate
         focusLocation = suggestion.coordinate
         
-        // ✅ CHARGER LES SILOS AUTOUR DE LA RECHERCHE
+        // ✅ CHARGER LES BORNES AUTOUR DE LA RECHERCHE
         Task {
-            await silosService.loadSilosAroundLocation(suggestion.coordinate)
+            await compostService.loadCompostBinsAroundLocation(suggestion.coordinate)
         }
         
         centerMapOnLocation(suggestion.coordinate)
@@ -308,7 +308,7 @@ struct SilosMapView: View {
                 searchedLocation = coordinate
                 focusLocation = coordinate
                 
-                await silosService.loadSilosAroundLocation(coordinate)
+                await compostService.loadCompostBinsAroundLocation(coordinate)
                 centerMapOnLocation(coordinate)
                 print("🔍 Recherche soumise: \(searchText)")
             }
@@ -327,7 +327,7 @@ struct SilosMapView: View {
             focusLocation = userLocation
             centerMapOnLocation(userLocation)
             Task {
-                await silosService.loadSilosAroundLocation(userLocation)
+                await compostService.loadCompostBinsAroundLocation(userLocation)
             }
             print("🏠 Retour au mode utilisateur")
         }
@@ -336,12 +336,12 @@ struct SilosMapView: View {
     // MARK: - Fonctions conservées et optimisées
     
     private func setupInitialLocation() {
-        print("🗺️ Setup initial - silos optimisé")
+        print("🗺️ Setup initial - compost optimisé")
         
         if let userLocation = locationService.userLocation {
             focusLocation = userLocation
             Task {
-                await silosService.loadSilosAroundLocation(userLocation)
+                await compostService.loadCompostBinsAroundLocation(userLocation)
             }
         } else {
             locationService.refreshLocation()
@@ -350,7 +350,7 @@ struct SilosMapView: View {
     
     private func refreshCurrentLocation() async {
         if let currentLocation = currentFocusLocation {
-            await silosService.loadSilosAroundLocation(currentLocation)
+            await compostService.loadCompostBinsAroundLocation(currentLocation)
         }
     }
     
@@ -362,7 +362,7 @@ struct SilosMapView: View {
     }
     
     // MARK: - Fonctions de géocodage (corrigées)
-    private func searchAddresses(query: String) async -> [SilosAddressSuggestion] {
+    private func searchAddresses(query: String) async -> [CompostAddressSuggestion] {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return []
         }
@@ -402,7 +402,7 @@ struct SilosMapView: View {
                 } ?? []
                 
                 let suggestions = filteredItems.prefix(5).map { item in
-                    SilosAddressSuggestion(
+                    CompostAddressSuggestion(
                         title: item.name ?? "Sans nom",
                         subtitle: self.formatFrenchAddress(item.placemark),
                         coordinate: item.placemark.coordinate
@@ -454,45 +454,45 @@ struct SilosMapView: View {
 
 // MARK: - ✅ SERVICE API ULTRA-OPTIMISÉ AVEC FILTRAGE GÉOGRAPHIQUE
 @MainActor
-class OptimizedSilosAPIService: ObservableObject {
-    @Published var nearbySilos: [SilosLocation] = []
+class OptimizedCompostAPIService: ObservableObject {
+    @Published var nearbyCompostBins: [CompostLocation] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
     
     // ✅ Cache intelligent par zones avec expiration longue
     private var zoneCache: [String: CachedZone] = [:]
     private let cacheExpiryTime: TimeInterval = 3600 // ✅ 1 heure au lieu de 5 minutes
-    private let maxSilosToShow = 50
+    private let maxCompostBinsToShow = 50
     
     // ✅ Cache global pour éviter les requêtes répétées
-    private static var globalSilosCache: [SilosLocation] = []
+    private static var globalCompostCache: [CompostLocation] = []
     private static var globalCacheTimestamp: Date = Date.distantPast
     private static let globalCacheExpiry: TimeInterval = 86400 // 24 heures
     
     struct CachedZone {
-        let silos: [SilosLocation]
+        let compostBins: [CompostLocation]
         let timestamp: Date
         let centerLocation: CLLocationCoordinate2D
     }
     
     // ✅ FONCTION PRINCIPALE - AVEC CACHE GLOBAL
-    func loadSilosAroundLocation(_ location: CLLocationCoordinate2D) async {
+    func loadCompostBinsAroundLocation(_ location: CLLocationCoordinate2D) async {
         // ✅ VÉRIFIER LE CACHE GLOBAL D'ABORD
-        if !Self.globalSilosCache.isEmpty,
+        if !Self.globalCompostCache.isEmpty,
            Date().timeIntervalSince(Self.globalCacheTimestamp) < Self.globalCacheExpiry {
             
             // Utiliser le cache global et filtrer localement
-            let nearbySilos = Self.globalSilosCache
-                .map { silo in
-                    let distance = location.distanceToSilo(silo.coordinate)
-                    return (silo: silo, distance: distance)
+            let nearbyCompostBins = Self.globalCompostCache
+                .map { bin in
+                    let distance = location.distanceToCompost(bin.coordinate)
+                    return (bin: bin, distance: distance)
                 }
                 .filter { $0.distance <= 800 }
                 .sorted { $0.distance < $1.distance }
-                .map { $0.silo }
+                .map { $0.bin }
             
-            self.nearbySilos = Array(nearbySilos.prefix(maxSilosToShow))
-            print("🌍 Cache global utilisé: \(self.nearbySilos.count) silos trouvés")
+            self.nearbyCompostBins = Array(nearbyCompostBins.prefix(maxCompostBinsToShow))
+            print("🌍 Cache global utilisé: \(self.nearbyCompostBins.count) bornes trouvées")
             return
         }
         
@@ -500,19 +500,19 @@ class OptimizedSilosAPIService: ObservableObject {
         let zoneKey = generateZoneKey(for: location)
         if let cachedZone = zoneCache[zoneKey],
            Date().timeIntervalSince(cachedZone.timestamp) < cacheExpiryTime,
-           cachedZone.centerLocation.distanceToSilo(location) < 200 {
+           cachedZone.centerLocation.distanceToCompost(location) < 200 {
             
-            nearbySilos = Array(cachedZone.silos.prefix(maxSilosToShow))
-            print("📦 Cache local utilisé: \(nearbySilos.count) silos depuis le cache")
+            nearbyCompostBins = Array(cachedZone.compostBins.prefix(maxCompostBinsToShow))
+            print("📦 Cache local utilisé: \(nearbyCompostBins.count) bornes depuis le cache")
             return
         }
         
         // ✅ CHARGER DEPUIS L'API SEULEMENT SI NÉCESSAIRE
-        await loadSilosFromAPIFallback(around: location)
+        await loadCompostBinsFromAPIFallback(around: location)
     }
     
     // ✅ CHARGEMENT OPTIMISÉ AVEC BBOX ET DEBUG
-    private func loadSilosFromAPI(around location: CLLocationCoordinate2D) async {
+    private func loadCompostBinsFromAPI(around location: CLLocationCoordinate2D) async {
         isLoading = true
         errorMessage = nil
         
@@ -521,7 +521,7 @@ class OptimizedSilosAPIService: ObservableObject {
             let optimizedURL = buildOptimizedURL(center: location, radiusMeters: 800)
             
             guard let url = URL(string: optimizedURL) else {
-                throw SilosAPIError.invalidURL
+                throw CompostAPIError.invalidURL
             }
             
             print("🌐 URL générée: \(optimizedURL)")
@@ -530,158 +530,162 @@ class OptimizedSilosAPIService: ObservableObject {
             let (data, response) = try await URLSession.shared.data(from: url)
             
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw SilosAPIError.invalidResponse
+                throw CompostAPIError.invalidResponse
             }
             
             print("📡 Status HTTP: \(httpResponse.statusCode)")
             
             guard httpResponse.statusCode == 200 else {
                 print("❌ Erreur HTTP \(httpResponse.statusCode), essai avec requête complète...")
-                await loadSilosFromAPIFallback(around: location)
+                await loadCompostBinsFromAPIFallback(around: location)
                 return
             }
             
-            let geoJsonResponse = try JSONDecoder().decode(SilosGeoJSONResponse.self, from: data)
+            let geoJsonResponse = try JSONDecoder().decode(CompostGeoJSONResponse.self, from: data)
             
             print("📊 Features reçues: \(geoJsonResponse.features.count)")
             
             // ✅ SI PAS DE RÉSULTATS AVEC BBOX, ESSAYER SANS BBOX
             if geoJsonResponse.features.isEmpty {
                 print("⚠️ Aucun résultat avec BBOX, essai sans filtrage...")
-                await loadSilosFromAPIFallback(around: location)
+                await loadCompostBinsFromAPIFallback(around: location)
                 return
             }
             
-            let silosLocations = geoJsonResponse.features.compactMap { feature -> SilosLocation? in
+            let compostLocations = geoJsonResponse.features.compactMap { feature -> CompostLocation? in
                 guard feature.geometry.coordinates.count >= 2 else { return nil }
                 
                 let longitude = feature.geometry.coordinates[0]
                 let latitude = feature.geometry.coordinates[1]
                 let props = feature.properties
                 
-                return SilosLocation(
+                return CompostLocation(
                     coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
-                    name: props.nom ?? "Silo à verre",
+                    identifiant: props.identifiant ?? "Non spécifié",
                     address: formatAddress(props),
+                    commune: props.commune ?? "Non spécifiée",
                     gestionnaire: props.gestionnaire ?? "Non spécifié",
-                    isAccessible: props.acces_pmr == "Oui" || props.acces_pmr == "oui",
-                    type: props.type_silo ?? "",
-                    capacite: props.capacite,
-                    commune: props.commune ?? ""
+                    collecteur: props.collecteur ?? "Non spécifié",
+                    numeroCircuit: props.numerocircuit ?? "",
+                    observationLocalisante: props.observation_localisante ?? "",
+                    dateDebutExploitation: props.datedebutexploitation ?? "",
+                    insee: props.insee ?? ""
                 )
             }
             
-            print("🏗️ Silos créés: \(silosLocations.count)")
+            print("🏗️ Bornes créées: \(compostLocations.count)")
             
             // ✅ Trier par distance et limiter
-            let sortedSilos = silosLocations
-                .map { silo in
-                    let distance = location.distanceToSilo(silo.coordinate)
-                    return (silo: silo, distance: distance)
+            let sortedCompostBins = compostLocations
+                .map { bin in
+                    let distance = location.distanceToCompost(bin.coordinate)
+                    return (bin: bin, distance: distance)
                 }
                 .sorted { $0.distance < $1.distance }
-                .map { $0.silo }
+                .map { $0.bin }
             
-            let limitedSilos = Array(sortedSilos.prefix(maxSilosToShow))
+            let limitedCompostBins = Array(sortedCompostBins.prefix(maxCompostBinsToShow))
             
             // ✅ Mettre en cache
             let zoneKey = generateZoneKey(for: location)
             zoneCache[zoneKey] = CachedZone(
-                silos: sortedSilos,
+                compostBins: sortedCompostBins,
                 timestamp: Date(),
                 centerLocation: location
             )
             
-            nearbySilos = limitedSilos
+            nearbyCompostBins = limitedCompostBins
             isLoading = false
             
-            print("✅ \(limitedSilos.count) silos chargés et triés par distance")
+            print("✅ \(limitedCompostBins.count) bornes chargées et triées par distance")
             
         } catch {
             errorMessage = "Erreur de chargement: \(error.localizedDescription)"
             isLoading = false
-            print("❌ Erreur chargement silos: \(error)")
+            print("❌ Erreur chargement bornes: \(error)")
             
             // ✅ ESSAYER EN FALLBACK SI ERREUR
             print("🔄 Tentative de fallback...")
-            await loadSilosFromAPIFallback(around: location)
+            await loadCompostBinsFromAPIFallback(around: location)
         }
     }
     
     // ✅ MÉTHODE FALLBACK SANS BBOX
-    private func loadSilosFromAPIFallback(around location: CLLocationCoordinate2D) async {
+    private func loadCompostBinsFromAPIFallback(around location: CLLocationCoordinate2D) async {
         do {
-            let fallbackURL = "https://data.grandlyon.com/geoserver/metropole-de-lyon/ows?SERVICE=WFS&VERSION=2.0.0&request=GetFeature&typename=metropole-de-lyon:gic_collecte.siloverre&outputFormat=application/json&SRSNAME=EPSG:4171&startIndex=0&sortby=gid"
+            let fallbackURL = "https://data.grandlyon.com/geoserver/metropole-de-lyon/ows?SERVICE=WFS&VERSION=2.0.0&request=GetFeature&typename=metropole-de-lyon:gic_collecte.bornecompost&outputFormat=application/json&SRSNAME=EPSG:4171&startIndex=0&sortby=gid"
             
             guard let url = URL(string: fallbackURL) else {
-                throw SilosAPIError.invalidURL
+                throw CompostAPIError.invalidURL
             }
             
-            print("🔄 Fallback: chargement de tous les silos...")
+            print("🔄 Fallback: chargement de toutes les bornes...")
             
             let (data, response) = try await URLSession.shared.data(from: url)
             
             guard let httpResponse = response as? HTTPURLResponse else {
-                throw SilosAPIError.invalidResponse
+                throw CompostAPIError.invalidResponse
             }
             
             guard httpResponse.statusCode == 200 else {
-                throw SilosAPIError.httpError(httpResponse.statusCode)
+                throw CompostAPIError.httpError(httpResponse.statusCode)
             }
             
-            let geoJsonResponse = try JSONDecoder().decode(SilosGeoJSONResponse.self, from: data)
+            let geoJsonResponse = try JSONDecoder().decode(CompostGeoJSONResponse.self, from: data)
             
-            print("📊 Total silos reçus (fallback): \(geoJsonResponse.features.count)")
+            print("📊 Total bornes reçues (fallback): \(geoJsonResponse.features.count)")
             
-            let allSilosLocations = geoJsonResponse.features.compactMap { feature -> SilosLocation? in
+            let allCompostLocations = geoJsonResponse.features.compactMap { feature -> CompostLocation? in
                 guard feature.geometry.coordinates.count >= 2 else { return nil }
                 
                 let longitude = feature.geometry.coordinates[0]
                 let latitude = feature.geometry.coordinates[1]
                 let props = feature.properties
                 
-                return SilosLocation(
+                return CompostLocation(
                     coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
-                    name: props.nom ?? "Silo à verre",
+                    identifiant: props.identifiant ?? "Non spécifié",
                     address: formatAddress(props),
+                    commune: props.commune ?? "Non spécifiée",
                     gestionnaire: props.gestionnaire ?? "Non spécifié",
-                    isAccessible: props.acces_pmr == "Oui" || props.acces_pmr == "oui",
-                    type: props.type_silo ?? "",
-                    capacite: props.capacite,
-                    commune: props.commune ?? ""
+                    collecteur: props.collecteur ?? "Non spécifié",
+                    numeroCircuit: props.numerocircuit ?? "",
+                    observationLocalisante: props.observation_localisante ?? "",
+                    dateDebutExploitation: props.datedebutexploitation ?? "",
+                    insee: props.insee ?? ""
                 )
             }
             
             // ✅ METTRE À JOUR LE CACHE GLOBAL
-            Self.globalSilosCache = allSilosLocations
+            Self.globalCompostCache = allCompostLocations
             Self.globalCacheTimestamp = Date()
             
-            print("🌍 Cache global mis à jour avec \(allSilosLocations.count) silos")
+            print("🌍 Cache global mis à jour avec \(allCompostLocations.count) bornes")
             
             // ✅ Filtrer par distance côté client (rayon 800m)
-            let nearbySilosLocations = allSilosLocations
-                .map { silo in
-                    let distance = location.distanceToSilo(silo.coordinate)
-                    return (silo: silo, distance: distance)
+            let nearbyCompostLocations = allCompostLocations
+                .map { bin in
+                    let distance = location.distanceToCompost(bin.coordinate)
+                    return (bin: bin, distance: distance)
                 }
                 .filter { $0.distance <= 800 } // ✅ Rayon de 800m
                 .sorted { $0.distance < $1.distance }
-                .map { $0.silo }
+                .map { $0.bin }
             
-            let limitedSilos = Array(nearbySilosLocations.prefix(maxSilosToShow))
+            let limitedCompostBins = Array(nearbyCompostLocations.prefix(maxCompostBinsToShow))
             
             // ✅ Mettre en cache
             let zoneKey = generateZoneKey(for: location)
             zoneCache[zoneKey] = CachedZone(
-                silos: nearbySilosLocations,
+                compostBins: nearbyCompostLocations,
                 timestamp: Date(),
                 centerLocation: location
             )
             
-            nearbySilos = limitedSilos
+            nearbyCompostBins = limitedCompostBins
             isLoading = false
             
-            print("✅ Fallback réussi: \(limitedSilos.count) silos proches trouvés")
+            print("✅ Fallback réussi: \(limitedCompostBins.count) bornes proches trouvées")
             
         } catch {
             errorMessage = "Erreur de chargement (fallback): \(error.localizedDescription)"
@@ -701,7 +705,7 @@ class OptimizedSilosAPIService: ObservableObject {
             "SERVICE=WFS",
             "VERSION=2.0.0",
             "request=GetFeature",
-            "typename=metropole-de-lyon:gic_collecte.siloverre",
+            "typename=metropole-de-lyon:gic_collecte.bornecompost",
             "outputFormat=application/json",
             "SRSNAME=EPSG:4171",
             "BBOX=\(bbox)",
@@ -743,28 +747,35 @@ class OptimizedSilosAPIService: ObservableObject {
         return "zone_\(gridLat)_\(gridLon)"
     }
     
-    private func formatAddress(_ props: SilosProperties) -> String {
+    private func formatAddress(_ props: CompostProperties) -> String {
+        if let adresse = props.adresse, !adresse.isEmpty {
+            var fullAddress = adresse
+            
+            if let commune = props.commune, !commune.isEmpty {
+                fullAddress += ", \(commune)"
+            }
+            
+            return fullAddress
+        }
+        
+        // Fallback si pas d'adresse principale
         var addressParts: [String] = []
         
-        if let adresse = props.adresse {
-            addressParts.append(adresse)
-        }
-        
-        if let codePostal = props.code_postal {
-            addressParts.append(codePostal)
-        }
-        
-        if let commune = props.commune {
+        if let commune = props.commune, !commune.isEmpty {
             addressParts.append(commune)
+        }
+        
+        if let identifiant = props.identifiant, !identifiant.isEmpty {
+            addressParts.append("ID: \(identifiant)")
         }
         
         return addressParts.isEmpty ? "Adresse non disponible" : addressParts.joined(separator: ", ")
     }
 }
 
-// MARK: - ✅ SECTION SILOS PROCHES AMÉLIORÉE
-struct NearestSilosView: View {
-    let silos: [SilosLocation]
+// MARK: - ✅ SECTION BORNES PROCHES AMÉLIORÉE
+struct NearestCompostBinsView: View {
+    let compostBins: [CompostLocation]
     let referenceLocation: CLLocationCoordinate2D
     let isSearchMode: Bool
     let themeColor: Color
@@ -772,7 +783,7 @@ struct NearestSilosView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(isSearchMode ? "Silos proches de votre recherche" : "Silos les plus proches")
+                Text(isSearchMode ? "Bornes proches de votre recherche" : "Bornes les plus proches")
                     .font(.headline)
                     .foregroundColor(.primary)
                 
@@ -790,9 +801,9 @@ struct NearestSilosView: View {
             .padding(.top)
             
             VStack(spacing: 8) {
-                ForEach(silos) { silo in
-                    NearestSilosRowView(
-                        silo: silo,
+                ForEach(compostBins) { bin in
+                    NearestCompostBinRowView(
+                        compostBin: bin,
                         referenceLocation: referenceLocation,
                         themeColor: themeColor
                     )
@@ -807,16 +818,16 @@ struct NearestSilosView: View {
     }
 }
 
-struct NearestSilosRowView: View {
-    let silo: SilosLocation
+struct NearestCompostBinRowView: View {
+    let compostBin: CompostLocation
     let referenceLocation: CLLocationCoordinate2D
     let themeColor: Color
     @State private var showNavigationAlert = false
     
     private var distance: String {
         let referenceCLLocation = CLLocation(latitude: referenceLocation.latitude, longitude: referenceLocation.longitude)
-        let siloLocation = CLLocation(latitude: silo.coordinate.latitude, longitude: silo.coordinate.longitude)
-        let distanceInMeters = referenceCLLocation.distance(from: siloLocation)
+        let binLocation = CLLocation(latitude: compostBin.coordinate.latitude, longitude: compostBin.coordinate.longitude)
+        let distanceInMeters = referenceCLLocation.distance(from: binLocation)
         
         if distanceInMeters < 1000 {
             return "\(Int(distanceInMeters))m"
@@ -830,41 +841,19 @@ struct NearestSilosRowView: View {
             showNavigationAlert = true
         }) {
             HStack(spacing: 12) {
-                Image("Silos")
+                Image("Compost")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 48, height: 48)
                     .foregroundColor(themeColor)
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(silo.address)
+                    Text(compostBin.address)
                         .font(.body)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
                         .multilineTextAlignment(.leading)
                         .lineLimit(2)
-                    
-                    HStack(spacing: 8) {
-                        if silo.isAccessible {
-                            Text("♿ Accessible")
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.green.opacity(0.2))
-                                .foregroundColor(.green)
-                                .cornerRadius(4)
-                        }
-                        
-                        if !silo.type.isEmpty {
-                            Text("📦 \(silo.type)")
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.blue.opacity(0.2))
-                                .foregroundColor(.blue)
-                                .cornerRadius(4)
-                        }
-                    }
                 }
                 
                 Spacer()
@@ -889,20 +878,20 @@ struct NearestSilosRowView: View {
         .cornerRadius(12)
         .alert("Navigation", isPresented: $showNavigationAlert) {
             Button("Ouvrir dans Plans") {
-                openNavigationToSilo()
+                openNavigationToCompostBin()
             }
             Button("Annuler", role: .cancel) { }
         } message: {
-            Text("Voulez-vous ouvrir la navigation vers ce silo ?")
+            Text("Voulez-vous ouvrir la navigation vers cette borne à compost ?")
         }
     }
     
-    private func openNavigationToSilo() {
-        let coordinate = silo.coordinate
+    private func openNavigationToCompostBin() {
+        let coordinate = compostBin.coordinate
         let placemark = MKPlacemark(coordinate: coordinate)
         let mapItem = MKMapItem(placemark: placemark)
         
-        mapItem.name = silo.address
+        mapItem.name = compostBin.address
         
         let launchOptions: [String: Any] = [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking,
@@ -911,16 +900,16 @@ struct NearestSilosRowView: View {
         
         mapItem.openInMaps(launchOptions: launchOptions)
         
-        print("🧭 Navigation à pied lancée vers: \(silo.address)")
+        print("🧭 Navigation à pied lancée vers: \(compostBin.address)")
     }
 }
 
 // MARK: - Composants UI optimisés
 
-struct SilosMapBoxView: View {
+struct CompostMapBoxView: View {
     @Binding var region: MKCoordinateRegion
-    let silos: [SilosLocation]
-    let mapAnnotations: [SilosMapAnnotationItem]
+    let compostBins: [CompostLocation]
+    let mapAnnotations: [CompostMapAnnotationItem]
     let userLocation: CLLocationCoordinate2D?
     let searchedLocation: CLLocationCoordinate2D?
     let isLoading: Bool
@@ -931,11 +920,11 @@ struct SilosMapBoxView: View {
         VStack(spacing: 0) {
             HStack {
                 if isSearchMode {
-                    Text("Silos autour de votre recherche (\(silos.count))")
+                    Text("Bornes autour de votre recherche (\(compostBins.count))")
                         .font(.headline)
                         .foregroundColor(.primary)
                 } else {
-                    Text("Silos autour de vous (\(silos.count))")
+                    Text("Bornes autour de vous (\(compostBins.count))")
                         .font(.headline)
                         .foregroundColor(.primary)
                 }
@@ -989,11 +978,11 @@ struct SilosMapBoxView: View {
                 showsUserLocation: true,
                 annotationItems: mapAnnotations) { annotation in
                 MapAnnotation(coordinate: annotation.coordinate) {
-                    if let silo = annotation.silo {
-                        SilosMarkerView(silo: silo, themeColor: themeColor)
-                            .id("silo-\(silo.id)")
+                    if let compostBin = annotation.compostBin {
+                        CompostMarkerView(compostBin: compostBin, themeColor: themeColor)
+                            .id("compost-\(compostBin.id)")
                     } else if annotation.isSearchResult {
-                        SilosSearchPinMarker()
+                        CompostSearchPinMarker()
                             .id("search-pin")
                     }
                 }
@@ -1028,27 +1017,27 @@ struct SilosMapBoxView: View {
     }
 }
 
-struct SilosMapAnnotationItem: Identifiable {
+struct CompostMapAnnotationItem: Identifiable {
     let id = UUID()
-    let silo: SilosLocation?
+    let compostBin: CompostLocation?
     let coordinate: CLLocationCoordinate2D
     let isSearchResult: Bool
     
-    init(silo: SilosLocation?, coordinate: CLLocationCoordinate2D, isSearchResult: Bool) {
-        self.silo = silo
+    init(compostBin: CompostLocation?, coordinate: CLLocationCoordinate2D, isSearchResult: Bool) {
+        self.compostBin = compostBin
         self.coordinate = coordinate
         self.isSearchResult = isSearchResult
     }
 }
 
-// MARK: - Composants UI spécifiques aux silos
+// MARK: - Composants UI spécifiques aux bornes compost
 
-struct SilosSmartSearchBarView: View {
+struct CompostSmartSearchBarView: View {
     @Binding var searchText: String
-    let suggestions: [SilosAddressSuggestion]
+    let suggestions: [CompostAddressSuggestion]
     @Binding var showSuggestions: Bool
     let onSearchTextChanged: (String) -> Void
-    let onSuggestionTapped: (SilosAddressSuggestion) -> Void
+    let onSuggestionTapped: (CompostAddressSuggestion) -> Void
     let onSearchSubmitted: () -> Void
     let onClearSearch: () -> Void
     let themeColor: Color
@@ -1099,9 +1088,9 @@ struct SilosSmartSearchBarView: View {
     }
 }
 
-struct SilosSuggestionsListView: View {
-    let suggestions: [SilosAddressSuggestion]
-    let onSuggestionTapped: (SilosAddressSuggestion) -> Void
+struct CompostSuggestionsListView: View {
+    let suggestions: [CompostAddressSuggestion]
+    let onSuggestionTapped: (CompostAddressSuggestion) -> Void
     
     var body: some View {
         VStack(spacing: 0) {
@@ -1138,7 +1127,7 @@ struct SilosSuggestionsListView: View {
     }
 }
 
-struct SilosLoadingOverlayView: View {
+struct CompostLoadingOverlayView: View {
     let themeColor: Color
     
     var body: some View {
@@ -1151,7 +1140,7 @@ struct SilosLoadingOverlayView: View {
                     .scaleEffect(1.5)
                     .tint(themeColor)
                 
-                Text("Chargement des silos proches...")
+                Text("Chargement des bornes proches...")
                     .font(.headline)
                     .foregroundColor(.primary)
             }
@@ -1167,7 +1156,7 @@ struct SilosLoadingOverlayView: View {
     }
 }
 
-struct SilosErrorOverlayView: View {
+struct CompostErrorOverlayView: View {
     let message: String
     let themeColor: Color
     let onRetry: () -> Void
@@ -1211,8 +1200,8 @@ struct SilosErrorOverlayView: View {
     }
 }
 
-struct SilosMarkerView: View {
-    let silo: SilosLocation
+struct CompostMarkerView: View {
+    let compostBin: CompostLocation
     let themeColor: Color
     @State private var showNavigationAlert = false
     
@@ -1220,7 +1209,7 @@ struct SilosMarkerView: View {
         Button(action: {
             showNavigationAlert = true
         }) {
-            Image("Silos")
+            Image("Compost")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 28, height: 28)
@@ -1233,16 +1222,16 @@ struct SilosMarkerView: View {
             }
             Button("Annuler", role: .cancel) { }
         } message: {
-            Text("Voulez-vous ouvrir la navigation vers \(silo.name) ?")
+            Text("Voulez-vous ouvrir la navigation vers cette borne à compost ?")
         }
     }
     
     private func openInMaps() {
-        let coordinate = silo.coordinate
+        let coordinate = compostBin.coordinate
         let placemark = MKPlacemark(coordinate: coordinate)
         let mapItem = MKMapItem(placemark: placemark)
         
-        mapItem.name = silo.name
+        mapItem.name = compostBin.address
         
         let launchOptions: [String: Any] = [
             MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking,
@@ -1251,11 +1240,11 @@ struct SilosMarkerView: View {
         
         mapItem.openInMaps(launchOptions: launchOptions)
         
-        print("🧭 Navigation lancée vers: \(silo.name)")
+        print("🧭 Navigation lancée vers: \(compostBin.address)")
     }
 }
 
-struct SilosSearchPinMarker: View {
+struct CompostSearchPinMarker: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
@@ -1288,56 +1277,64 @@ struct SilosSearchPinMarker: View {
 
 // MARK: - Modèles de données
 
-struct SilosLocation: Identifiable {
+struct CompostLocation: Identifiable {
     let id = UUID()
     let coordinate: CLLocationCoordinate2D
-    let name: String
+    let identifiant: String
     let address: String
-    let gestionnaire: String
-    let isAccessible: Bool
-    let type: String
-    let capacite: String?
     let commune: String
+    let gestionnaire: String
+    let collecteur: String
+    let numeroCircuit: String
+    let observationLocalisante: String
+    let dateDebutExploitation: String
+    let insee: String
 }
 
-struct SilosGeoJSONResponse: Codable {
+struct CompostGeoJSONResponse: Codable {
     let type: String
-    let features: [SilosFeature]
+    let features: [CompostFeature]
     let totalFeatures: Int?
 }
 
-struct SilosFeature: Codable {
+struct CompostFeature: Codable {
     let type: String
-    let geometry: SilosGeometry
-    let properties: SilosProperties
+    let geometry: CompostGeometry
+    let properties: CompostProperties
 }
 
-struct SilosGeometry: Codable {
+struct CompostGeometry: Codable {
     let type: String
     let coordinates: [Double]
 }
 
-struct SilosProperties: Codable {
-    let gid: Int?
-    let nom: String?
+struct CompostProperties: Codable {
+    let idemplacementsilo: String?
+    let identifiant: String?
     let adresse: String?
-    let code_postal: String?
     let commune: String?
+    let codefuv: String?
+    let observation_localisante: String?
+    let numerocircuit: String?
     let gestionnaire: String?
-    let acces_pmr: String?
-    let type_silo: String?
-    let capacite: String?
+    let collecteur: String?
+    let datedebutexploitation: String?
+    let datecreation: String?
+    let maj_alphanumerique: String?
+    let maj_geometrie: String?
+    let insee: String?
+    let gid: Int?
 }
 
 // MARK: - Modèle local pour éviter les conflits
-struct SilosAddressSuggestion: Identifiable {
+struct CompostAddressSuggestion: Identifiable {
     let id = UUID()
     let title: String
     let subtitle: String
     let coordinate: CLLocationCoordinate2D
 }
 
-enum SilosAPIError: Error, LocalizedError {
+enum CompostAPIError: Error, LocalizedError {
     case invalidURL
     case invalidResponse
     case httpError(Int)
@@ -1354,10 +1351,10 @@ enum SilosAPIError: Error, LocalizedError {
     }
 }
 
-// MARK: - Extensions pour les calculs de distance (SilosMapView)
+// MARK: - Extensions pour les calculs de distance (CompostMapView)
 
 extension CLLocationCoordinate2D {
-    func distanceToSilo(_ coordinate: CLLocationCoordinate2D) -> Double {
+    func distanceToCompost(_ coordinate: CLLocationCoordinate2D) -> Double {
         let location1 = CLLocation(latitude: self.latitude, longitude: self.longitude)
         let location2 = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
         return location1.distance(from: location2)
@@ -1365,5 +1362,5 @@ extension CLLocationCoordinate2D {
 }
 
 #Preview {
-    SilosMapView()
+    CompostMapView()
 }

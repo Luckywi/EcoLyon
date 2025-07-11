@@ -15,7 +15,7 @@ struct MenuDesignSystem {
     static let cornerRadius: CGFloat = 16
     
     // Couleurs inspirées de la maquette
-    static let fontaineColor = Color(red: 0xA5/255.0, green: 0xB2/255.0, blue: 0xA2/255.0).opacity(0.6)
+    static let fontaineColor = Color(red: 0xA5/255.0, green: 0xB2/255.0, blue: 0xA2/255.0)
     static let randoColor = Color(red: 0xD4/255.0, green: 0xBE/255.0, blue: 0xA0/255.0)
     static let poubelleColor = Color(red: 0.6, green: 0.6, blue: 0.6)
     static let parcColor = Color(red: 0xAF/255.0, green: 0xD0/255.0, blue: 0xA3/255.0)
@@ -24,30 +24,44 @@ struct MenuDesignSystem {
     static let bancsColor = Color(red: 0.7, green: 0.5, blue: 0.4)
     static let toilettesColor = Color(red: 0.7, green: 0.7, blue: 0.7)
     static let bornesColor = Color(red: 0.5, green: 0.6, blue: 0.7)
-    static let accueilColor = Color(red: 0.5, green: 0.5, blue: 0.5)
+    static let accueilColor = Color(red: 0.2, green: 0.2, blue: 0.2)
     
     // Couleurs de thème
     static let defaultBackgroundColor = Color(red: 248/255, green: 247/255, blue: 244/255)
     static let toiletThemeColor = Color(red: 0.7, green: 0.7, blue: 0.7)
 }
 
-
-// ✅ MODIFICATION CRITIQUE : Éviter la fermeture automatique du menu lors du tap sur l'overlay
+// ✅ MENU CORRIGÉ : Ignore le clavier et reste fixe en bas
 struct FixedBottomMenuView: View {
     @Binding var isMenuExpanded: Bool
     @Binding var showToiletsMap: Bool
     @Binding var showBancsMap: Bool
+    @Binding var showFontainesMap: Bool
+    @Binding var showSilosMap: Bool
+    @Binding var showBornesMap: Bool
+    @Binding var showCompostMap: Bool
+    @Binding var showParcsMap: Bool
+    @Binding var showPoubelleMap: Bool
+    @Binding var showRandosMap: Bool
     let onHomeSelected: () -> Void
     
     // Paramètre pour le thème
     let themeColor: Color?
     
-    // ✅ AJOUT : Référence au NavigationManager pour vérifier les transitions
+    // ✅ État pour détecter le clavier
+    @State private var keyboardHeight: CGFloat = 0
+    
+    // ✅ AJOUT : Référence au NavigationManager pour vérifier les transitions ET la destination actuelle
     @StateObject private var navigationManager = NavigationManager.shared
     
     // Hauteur du bouton menu + padding pour le background
     private let menuButtonHeight: CGFloat = 56
     private let backgroundExtraHeight: CGFloat = 56
+    
+    // ✅ COMPUTED PROPERTY : Vérifier si on est sur la page d'accueil
+    private var isOnHomePage: Bool {
+        return navigationManager.currentDestination == "home"
+    }
     
     // Computed properties pour les couleurs selon le thème
     private var backgroundColorClosed: Color {
@@ -70,17 +84,31 @@ struct FixedBottomMenuView: View {
         }
     }
     
-    // Initializer
+    // ✅ Initializer mis à jour avec showFontainesMap
     init(
         isMenuExpanded: Binding<Bool>,
         showToiletsMap: Binding<Bool>,
         showBancsMap: Binding<Bool>,
+        showFontainesMap: Binding<Bool> = .constant(false),
+        showSilosMap: Binding<Bool>,
+        showBornesMap: Binding<Bool>,
+        showCompostMap: Binding<Bool> = .constant(false),
+        showParcsMap: Binding<Bool> = .constant(false),
+        showPoubelleMap: Binding<Bool>,
+        showRandosMap: Binding<Bool>,
         onHomeSelected: @escaping () -> Void,
         themeColor: Color? = nil
     ) {
         self._isMenuExpanded = isMenuExpanded
         self._showToiletsMap = showToiletsMap
         self._showBancsMap = showBancsMap
+        self._showFontainesMap = showFontainesMap
+        self._showSilosMap = showSilosMap
+        self._showBornesMap = showBornesMap
+        self._showCompostMap = showCompostMap
+        self._showParcsMap = showParcsMap
+        self._showPoubelleMap = showPoubelleMap
+        self._showRandosMap = showRandosMap
         self.onHomeSelected = onHomeSelected
         self.themeColor = themeColor
     }
@@ -132,9 +160,12 @@ struct FixedBottomMenuView: View {
                                 .padding(.top, 12)
                                 .padding(.bottom, 20)
                             
-                            // ✅ Layout du menu SIMPLIFIÉ
+                            // ✅ Layout du menu avec showHomeButton basé sur la destination actuelle
                             MenuLayoutRedesigned(
-                                onHomeSelected: onHomeSelected
+                                showParcsMap: $showParcsMap,
+                                showPoubelleMap: $showPoubelleMap,
+                                onHomeSelected: onHomeSelected,
+                                showHomeButton: !isOnHomePage  // ✅ MASQUER le bouton si on est sur l'accueil
                             )
                             .padding(.horizontal, MenuDesignSystem.containerPadding)
                             .padding(.bottom, 20)
@@ -144,6 +175,10 @@ struct FixedBottomMenuView: View {
                     
                     // Onglet du menu avec couleur adaptée au thème
                     Button(action: {
+                        // ✅ Fermer le clavier avant d'ouvrir le menu
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                                      to: nil, from: nil, for: nil)
+                        
                         // ✅ Ne permettre l'ouverture/fermeture du menu que si on n'est pas en transition
                         if !navigationManager.isTransitioning {
                             withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
@@ -180,15 +215,46 @@ struct FixedBottomMenuView: View {
                     .disabled(navigationManager.isTransitioning)
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 0)
             }
             .animation(.spring(response: 0.6, dampingFraction: 0.8), value: isMenuExpanded)
         }
+        // ✅ POSITION ABSOLUMENT FIXE - IGNORE LE CLAVIER
+        .ignoresSafeArea(.keyboard, edges: .bottom)
+        .padding(.bottom, 0) // Safe area du bas
+        // ✅ Écouter les notifications du clavier
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+            handleKeyboardShow(notification)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            handleKeyboardHide()
+        }
+    }
+    
+    // ✅ Gestion du clavier
+    private func handleKeyboardShow(_ notification: Notification) {
+        guard let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+        
+        keyboardHeight = keyboardFrame.height
+        
+        // ✅ Fermer automatiquement le menu si le clavier s'ouvre
+        if isMenuExpanded {
+            withAnimation(.easeOut(duration: 0.3)) {
+                isMenuExpanded = false
+            }
+        }
+    }
+    
+    private func handleKeyboardHide() {
+        keyboardHeight = 0
     }
 }
-// MARK: - Layout redesigné selon la maquette - CORRIGÉ
+
+// MARK: - Layout redesigné selon la maquette - AVEC FONTAINES ET BOUTON ACCUEIL CONDITIONNEL
 struct MenuLayoutRedesigned: View {
+    @Binding var showParcsMap: Bool
+    @Binding var showPoubelleMap: Bool
     let onHomeSelected: () -> Void
+    let showHomeButton: Bool  // ✅ NOUVEAU PARAMÈTRE pour contrôler l'affichage du bouton Accueil
     
     @StateObject private var navigationManager = NavigationManager.shared
     
@@ -196,7 +262,7 @@ struct MenuLayoutRedesigned: View {
         VStack(spacing: MenuDesignSystem.cardSpacing) {
             // LIGNE 1: Fontaines + Randos
             HStack(spacing: MenuDesignSystem.cardSpacing) {
-                // Fontaines (grande carte verticale à gauche)
+                // ✅ Fontaines AVEC NAVIGATION ACTIVE
                 MenuCardRedesigned(
                     title: "Fontaines\nd'Eau",
                     icon: "Fontaine",
@@ -231,7 +297,7 @@ struct MenuLayoutRedesigned: View {
             
             // LIGNE 2: Poubelles + Parcs et Jardins
             HStack(spacing: MenuDesignSystem.cardSpacing) {
-                // Poubelles (petite carte carrée)
+                // Poubelles
                 MenuCardRedesigned(
                     title: "Poubelles",
                     icon: "Poubelle",
@@ -241,11 +307,13 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.poubelleColor,
-                    action: { print("Poubelles - À implémenter") }
+                    action: {
+                        navigationManager.navigateToPoubelle()
+                    }
                 )
                 .frame(width: 120, height: 140)
                 
-                // Parcs et Jardins (grande carte carrée avec icône)
+                // Parcs et Jardins
                 MenuCardRedesigned(
                     title: "Parcs et Jardins",
                     icon: "PetJ",
@@ -255,14 +323,16 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.parcColor,
-                    action: { print("Parcs et Jardins - À implémenter") }
+                    action: {
+                        navigationManager.navigateToParcs()
+                    }
                 )
                 .frame(height: 140)
             }
             
             // LIGNE 3: Bornes à Compost + Silos à Verre
             HStack(spacing: MenuDesignSystem.cardSpacing) {
-                // Bornes à Compost (carte large)
+                // Bornes à Compost
                 MenuCardRedesigned(
                     title: "Bornes à Compost",
                     icon: "Compost",
@@ -272,7 +342,9 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.compostColor,
-                    action: { print("Compost - À implémenter") }
+                    action: {
+                        navigationManager.navigateToCompost()
+                    }
                 )
                 .frame(height: 115)
                 
@@ -286,14 +358,16 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.silosColor,
-                    action: { print("Silos - À implémenter") }
+                    action: {
+                        navigationManager.navigateToSilos()
+                    }
                 )
                 .frame(width: 100, height: 115)
             }
             
             // LIGNE 4: Bancs + Toilettes + Bornes Électriques
             HStack(spacing: MenuDesignSystem.cardSpacing) {
-                // ✅ Bancs avec navigation DIRECTE
+                // Bancs
                 MenuCardRedesigned(
                     title: "Bancs",
                     icon: "Banc",
@@ -309,7 +383,7 @@ struct MenuLayoutRedesigned: View {
                 )
                 .frame(height: 155)
                 
-                // ✅ Toilettes avec navigation DIRECTE
+                // Toilettes
                 MenuCardRedesigned(
                     title: "Toilettes\nPubliques",
                     icon: "Wc",
@@ -327,7 +401,7 @@ struct MenuLayoutRedesigned: View {
                 
                 // Bornes Électriques
                 MenuCardRedesigned(
-                    title: "Bornes\nÉlectriques",
+                    title: "Stations\nde Recharge",
                     icon: "Borne",
                     iconSize: 80,
                     iconPosition: .top,
@@ -335,24 +409,29 @@ struct MenuLayoutRedesigned: View {
                     textPadding: 0,
                     cardPadding: 0,
                     backgroundColor: MenuDesignSystem.bornesColor,
-                    action: { print("Bornes Électriques - À implémenter") }
+                    action: {
+                        navigationManager.navigateToBornes()
+                    }
                 )
                 .frame(height: 155)
             }
             
-            // BOUTON ACCUEIL
-            Button(action: onHomeSelected) {
-                Text("Accueil")
-                    .font(.system(size: MenuDesignSystem.fontLarge, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(
-                        RoundedRectangle(cornerRadius: MenuDesignSystem.cornerRadius)
-                            .fill(MenuDesignSystem.accueilColor)
-                    )
+            // ✅ BOUTON ACCUEIL CONDITIONNEL - Seulement affiché si showHomeButton est true
+            if showHomeButton {
+                Button(action: onHomeSelected) {
+                    Text("Accueil")
+                        .font(.system(size: MenuDesignSystem.fontLarge, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(
+                            RoundedRectangle(cornerRadius: MenuDesignSystem.cornerRadius)
+                                .fill(MenuDesignSystem.accueilColor)
+                        )
+                }
+                .buttonStyle(PlainButtonStyle())
+                .transition(.opacity.combined(with: .scale))  // Animation lors de l'apparition/disparition
             }
-            .buttonStyle(PlainButtonStyle())
         }
     }
 }
@@ -456,12 +535,26 @@ struct MenuCardRedesigned: View {
     }
 }
 
+// ✅ Extension pour fermer le clavier
+extension UIApplication {
+    func endEditing() {
+        sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
 // MARK: - Preview
 #Preview {
     struct PreviewWrapper: View {
         @State private var isMenuExpanded = false
         @State private var showToiletsMap = false
         @State private var showBancsMap = false
+        @State private var showFontainesMap = false
+        @State private var showSilosMap = false
+        @State private var showBornesMap = false
+        @State private var showCompostMap = false
+        @State private var showParcsMap = false
+        @State private var showPoubelleMap = false
+        @State private var showRandosMap = false
         
         var body: some View {
             ZStack {
@@ -472,6 +565,13 @@ struct MenuCardRedesigned: View {
                     isMenuExpanded: $isMenuExpanded,
                     showToiletsMap: $showToiletsMap,
                     showBancsMap: $showBancsMap,
+                    showFontainesMap: $showFontainesMap,
+                    showSilosMap: $showSilosMap,
+                    showBornesMap: $showBornesMap,
+                    showCompostMap: $showCompostMap,
+                    showParcsMap: $showParcsMap,
+                    showPoubelleMap: $showPoubelleMap,
+                    showRandosMap : $showRandosMap,
                     onHomeSelected: {
                         print("Accueil sélectionné")
                     }

@@ -1,13 +1,8 @@
-//
-//  EnvironmentCardView.swift
-//  EcoLyon
-//
-//  Created by Claude Assistant on 11/06/2025.
-//
-
 import SwiftUI
 
 struct EnvironmentCardView: View {
+    @StateObject private var navigationManager = NavigationManager.shared
+    
     var body: some View {
         VStack(spacing: 0) {
             // En-tête de la section
@@ -23,7 +18,7 @@ struct EnvironmentCardView: View {
             
             // Carte principale avec les boutons
             VStack(spacing: 20) {
-                // Section Composteurs
+                // Section Composteurs - Navigation via NavigationManager
                 EnvironmentButtonView(
                     icon: "Compost",
                     title: "Cartes des composteurs",
@@ -31,11 +26,11 @@ struct EnvironmentCardView: View {
                     accentColor: .green,
                     isCustomIcon: true,
                     action: {
-                        print("Composteurs sélectionnés")
+                        navigationManager.navigateToCompost()
                     }
                 )
                 
-                // Section Collecte
+                // Section Collecte - Navigation via NavigationManager
                 EnvironmentButtonView(
                     icon: "Silos",
                     title: "Recyclage du verre",
@@ -43,44 +38,42 @@ struct EnvironmentCardView: View {
                     accentColor: .orange,
                     isCustomIcon: true,
                     action: {
-                        print("Localisation silos verre")
+                        navigationManager.navigateToSilos()
                     }
                 )
                 
                 EnvironmentButtonView(
-                    icon: "Pannier",
-                    title: "Seau à compost gratuit",
-                    subtitle: "Demandez le vôtre en quelques clics",
+                    icon: "CompostGratuit",
+                    title: "Composteur gratuit",
+                    subtitle: "La métropole de Lyon vous offre un composteur",
                     accentColor: .orange,
                     isCustomIcon: true,
                     action: {
-                        print("Demande seau à compost")
+                        navigationManager.navigateToComposteurGratuit()
                     }
                 )
-
                 
-                
-                // Section Guide
+                // NOUVEAU: Guide des bornes à compost
                 EnvironmentButtonView(
                     icon: "Guide",
-                    title: "Guide du tri",
-                    subtitle: "Tout savoir sur le compost et le tri",
-                    accentColor: .purple,
+                    title: "Guide des bornes à compost",
+                    subtitle: "Tout savoir sur le compostage collectif",
+                    accentColor: Color(red: 0x8C/255.0, green: 0xC1/255.0, blue: 0xCB/255.0), // CompostColor
                     isCustomIcon: true,
                     action: {
-                        print("Guide sélectionné")
+                        navigationManager.navigateToCompostGuide()
                     }
                 )
                 
                 // Section Statistiques
                 EnvironmentButtonView(
                     icon: "Lyon",
-                    title: "Lyon éco-responsable",
-                    subtitle: "Impact environnemental de la métropole",
+                    title: "Lyon en transition",
+                    subtitle: "Découvrez 70 faits sur la métropole",
                     accentColor: .teal,
                     isCustomIcon: true,
                     action: {
-                        print("Statistiques sélectionnées")
+                        navigationManager.navigateToLyonFacts()
                     }
                 )
                 
