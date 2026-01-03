@@ -1,193 +1,913 @@
 import SwiftUI
 import MapKit
-import Foundation
+import CoreLocation
+
+// MARK: - RandosMapView
 
 struct RandosMapView: View {
+    @Environment(\.colorScheme) var colorScheme
     @StateObject private var randoService = RandoAPIService()
-    @StateObject private var locationService = GlobalLocationService.shared
-    @StateObject private var navigationManager = NavigationManager.shared
-    
-    // Region et états
-    @State private var region: MKCoordinateRegion
-    @State private var hasInitialized = false // Pour éviter la réinitialisation
-    
-    // State pour la modale détail
+    @ObservedObject private var locationService = GlobalLocationService.shared
+    @ObservedObject private var weatherService = AppWeatherService.shared
+    @ObservedObject private var navigationManager = NavigationManager.shared
+
+    @State private var cameraPosition: MapCameraPosition
+    @State private var isHeaderExpanded = false
     @State private var selectedBoucle: BoucleLocation?
-    @State private var showBoucleDetail = false
-    
-    // Couleur theme
-    private let randoThemeColor = Color(red: 0xD4/255.0, green: 0xBE/255.0, blue: 0xA0/255.0)
-    
-    // Computed property pour TOUTES les boucles triées par distance
-    private var nearestBoucles: [BoucleLocation] {
-        guard let userLocation = locationService.userLocation else {
-            // Si pas de position utilisateur, retourner toutes les boucles sans tri
+
+    // État de l'îlot flottant
+    @State private var isIslandExpanded = false
+
+    // État du mode liste (comme le mode recherche dans FontainesMapView)
+    @State private var isListMode = false
+
+    // États pour les contrôles carte
+    @State private var mapHeading: Double = 0
+    @State private var isMapCenteredOnUser = false
+
+    private let themeColor = Color(red: 0.30, green: 0.69, blue: 0.31)
+
+    // État de chargement initial
+    @State private var hasLoadedOnce = false
+
+    // Computed property pour l'overlay de chargement
+    private var showLoadingOverlay: Bool {
+        !hasLoadedOnce && randoService.boucles.isEmpty
+    }
+
+    // MARK: - Computed Properties pour l'îlot
+
+    private var islandState: IslandState {
+        if isListMode { return .keyboard }
+        if isIslandExpanded { return .expanded }
+        return .collapsed
+    }
+
+    private var islandMaxHeight: CGFloat? {
+        switch islandState {
+        case .collapsed: return nil
+        case .expanded: return UIScreen.main.bounds.height * 0.55
+        case .keyboard: return UIScreen.main.bounds.height * 0.7
+        }
+    }
+
+    private var islandCornerRadius: CGFloat { 20 }
+
+    private var islandBottomRadius: CGFloat {
+        islandState == .keyboard ? 0 : islandCornerRadius
+    }
+
+    private var islandHorizontalPadding: CGFloat {
+        islandState == .keyboard ? 0 : 10
+    }
+
+    private var showDimOverlay: Bool {
+        islandState == .keyboard
+    }
+
+    // Boucle la plus proche de l'utilisateur
+    private var closestBoucle: BoucleLocation? {
+        guard let userLoc = locationService.userLocation else {
+            return randoService.boucles.first
+        }
+        let userCL = CLLocation(latitude: userLoc.latitude, longitude: userLoc.longitude)
+        return randoService.boucles.min { b1, b2 in
+            let loc1 = CLLocation(latitude: b1.centerCoordinate.latitude, longitude: b1.centerCoordinate.longitude)
+            let loc2 = CLLocation(latitude: b2.centerCoordinate.latitude, longitude: b2.centerCoordinate.longitude)
+            return userCL.distance(from: loc1) < userCL.distance(from: loc2)
+        }
+    }
+
+    // Liste triée avec la boucle sélectionnée en premier
+    private var sortedBoucles: [BoucleLocation] {
+        guard let selected = selectedBoucle else {
             return randoService.boucles
         }
-        
-        return randoService.boucles
-            .map { boucle in
-                let distance = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
-                    .distance(from: CLLocation(latitude: boucle.centerCoordinate.latitude, longitude: boucle.centerCoordinate.longitude))
-                return (boucle: boucle, distance: distance)
-            }
-            .sorted { $0.distance < $1.distance }
-            .map { $0.boucle }
+        var sorted = randoService.boucles.filter { $0.id != selected.id }
+        sorted.insert(selected, at: 0)
+        return sorted
     }
-    
-    // ✅ Initializer modifié - avec détection Lyon
+
     init() {
         let lyonCenter = CLLocationCoordinate2D(latitude: 45.7578, longitude: 4.8320)
-        
-        let (initialCenter, initialSpan) = Self.determineInitialMapSettings(
-            userLocation: GlobalLocationService.shared.userLocation,
-            lyonCenter: lyonCenter
-        )
-        
-        _region = State(initialValue: MKCoordinateRegion(
-            center: initialCenter,
-            span: initialSpan
-        ))
+        _cameraPosition = State(initialValue: .camera(MapCamera(
+            centerCoordinate: lyonCenter,
+            distance: 50000,
+            heading: 0,
+            pitch: 0
+        )))
     }
-    
-    // ✅ Fonction statique pour déterminer les paramètres initiaux
-    private static func determineInitialMapSettings(
-        userLocation: CLLocationCoordinate2D?,
-        lyonCenter: CLLocationCoordinate2D
-    ) -> (center: CLLocationCoordinate2D, span: MKCoordinateSpan) {
-        
-        guard let userLocation = userLocation else {
-            print("🏛️ Randos: Pas de position utilisateur - centrage sur Lyon")
-            return (
-                center: lyonCenter,
-                span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
-            )
+
+    var body: some View {
+        ZStack {
+            // Carte avec tous les tracés
+            MapReader { proxy in
+                Map(position: $cameraPosition, interactionModes: [.pan, .zoom, .rotate, .pitch]) {
+                    ForEach(randoService.boucles) { boucle in
+                        if !boucle.coordinates.isEmpty {
+                            MapPolyline(coordinates: boucle.coordinates)
+                                .stroke(
+                                    selectedBoucle?.id == boucle.id ? Color.blue : Color.gray.opacity(0.7),
+                                    style: StrokeStyle(
+                                        lineWidth: selectedBoucle?.id == boucle.id ? 6 : 4,
+                                        lineCap: .round,
+                                        lineJoin: .round
+                                    )
+                                )
+                        }
+                    }
+
+                    UserAnnotation()
+                }
+                .mapStyle(.standard(elevation: .realistic))
+                .mapControls { }
+                .onTapGesture { screenPoint in
+                    if let coordinate = proxy.convert(screenPoint, from: .local) {
+                        handleMapTap(at: coordinate)
+                    }
+                }
+                .onMapCameraChange(frequency: .continuous) { context in
+                    mapHeading = context.camera.heading
+                }
+            }
+            .ignoresSafeArea(edges: .top)
+            .safeAreaInset(edge: .bottom) {
+                Color.clear
+                    .frame(height: 120)
+                    .allowsHitTesting(false)
+            }
+
+            // Header
+            VStack {
+                headerIsland
+
+                Spacer()
+            }
+
+            // Boutons météo/boussole/localisation/recherche à droite
+            VStack {
+                Spacer()
+
+                HStack {
+                    Spacer()
+
+                    VStack(spacing: 10) {
+                        // Widget météo + qualité d'air
+                        Button(action: {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            if let location = locationService.userLocation {
+                                Task {
+                                    await weatherService.fetchWeather(for: location)
+                                }
+                            }
+                        }) {
+                            VStack(alignment: .center, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: weatherService.weatherData.conditionSymbol)
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.gray)
+                                        .symbolRenderingMode(.multicolor)
+
+                                    Text(weatherService.weatherData.formattedTemperature)
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.primary)
+                                }
+
+                                HStack(spacing: 4) {
+                                    Text("Air")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+
+                                    Circle()
+                                        .fill(weatherService.weatherData.airQualityColor)
+                                        .frame(width: 6, height: 6)
+                                }
+                            }
+                            .frame(width: 52, height: 44)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(colorScheme == .dark ? .ultraThinMaterial : .regularMaterial)
+                                    .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
+                            )
+                        }
+
+                        // Boussole
+                        Button(action: resetMapToNorth) {
+                            CompassView(heading: mapHeading)
+                                .frame(width: 52, height: 44)
+                        }
+                        .buttonStyle(.plain)
+
+                        // Bouton localisation
+                        Button(action: recenterOnUser) {
+                            Image(systemName: "location")
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .frame(width: 52, height: 44)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(colorScheme == .dark ? .ultraThinMaterial : .regularMaterial)
+                                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
+                                )
+                        }
+
+                        // Bouton recherche
+                        Button(action: {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            withAnimation(IslandState.animation) {
+                                isListMode = true
+                            }
+                        }) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundColor(.primary)
+                                .frame(width: 44, height: 44)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(colorScheme == .dark ? .ultraThinMaterial : .regularMaterial)
+                                        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
+                                )
+                        }
+                    }
+                    .padding(.trailing, 12)
+                }
+                .padding(.bottom, 160)
+            }
+
+            // Overlay sombre quand mode liste
+            Color.black.opacity(showDimOverlay ? 0.3 : 0)
+                .ignoresSafeArea()
+                .allowsHitTesting(showDimOverlay)
+                .onTapGesture {
+                    withAnimation(IslandState.animation) {
+                        isListMode = false
+                    }
+                }
+                .animation(IslandState.animation, value: islandState)
+
+            // Îlot flottant en bas
+            VStack {
+                Spacer()
+                boucleIsland
+            }
+            .ignoresSafeArea(.container, edges: isListMode ? .bottom : [])
+
+            // Overlay de chargement
+            if showLoadingOverlay {
+                MapLoadingOverlay(
+                    imageName: "Rando",
+                    title: "Randonnées",
+                    themeColor: themeColor,
+                    hasError: false
+                )
+                .transition(.asymmetric(
+                    insertion: .opacity.animation(.easeOut(duration: 0.2)),
+                    removal: .opacity.combined(with: .scale(scale: 1.1)).animation(.easeOut(duration: 0.4))
+                ))
+                .zIndex(100)
+            }
         }
-        
-        // Calculer la distance depuis Lyon
-        let userCLLocation = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
-        let lyonCLLocation = CLLocation(latitude: lyonCenter.latitude, longitude: lyonCenter.longitude)
-        let distanceFromLyon = userCLLocation.distance(from: lyonCLLocation)
-        
-        // Si l'utilisateur est à plus de 50km de Lyon
-        if distanceFromLyon > 50000 {
-            print("🌍 Randos: Utilisateur trop loin de Lyon (\(Int(distanceFromLyon/1000))km) - centrage sur Lyon")
-            return (
-                center: lyonCenter,
-                span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
-            )
-        } else {
-            print("🎯 Randos: Utilisateur proche de Lyon (\(Int(distanceFromLyon/1000))km) - centrage sur position utilisateur")
-            return (
-                center: userLocation,
-                span: MKCoordinateSpan(latitudeDelta: 0.11, longitudeDelta: 0.11)
-            )
+        .onAppear {
+            navigationManager.currentDestination = .randos
+            Task {
+                await randoService.loadBoucles()
+                hasLoadedOnce = true
+                // Sélectionner la boucle la plus proche par défaut (sans zoom)
+                if selectedBoucle == nil {
+                    selectedBoucle = closestBoucle
+                    if let boucle = selectedBoucle {
+                        centerOnBoucle(boucle)
+                    }
+                }
+            }
+            // Charger les données météo
+            if let location = locationService.userLocation {
+                Task {
+                    await weatherService.fetchWeather(for: location)
+                }
+            }
+        }
+        .onChange(of: randoService.boucles.count) { _, newCount in
+            if newCount > 0 {
+                hasLoadedOnce = true
+            }
         }
     }
-}
 
-// MARK: - Service API et modèles
+    // MARK: - Header Island
 
-@MainActor
-class RandoAPIService: ObservableObject {
-    @Published var boucles: [BoucleLocation] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-    
-    private let apiURL = "https://data.grandlyon.com/geoserver/metropole-de-lyon/ows?SERVICE=WFS&VERSION=2.0.0&request=GetFeature&typename=metropole-de-lyon:boucle-de-randonnee&outputFormat=application/json&SRSNAME=EPSG:4171&startIndex=0&sortby=gid"
-    
-    func loadBoucles() async {
-        print("🔄 Début loadBoucles - isLoading: \(isLoading)")
-        
-        guard !isLoading else {
-            print("⚠️ Chargement déjà en cours, abandon")
-            return
+    @ViewBuilder
+    private var headerIsland: some View {
+        HStack(alignment: .top) {
+            Button(action: { navigationManager.navigateToHome() }) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(colorScheme == .dark ? .ultraThinMaterial : .regularMaterial)
+                            .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
+                    )
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 0) {
+                Button(action: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        isHeaderExpanded.toggle()
+                    }
+                }) {
+                    HStack(spacing: 10) {
+                        Text("Randonnées")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.primary)
+
+                        Image("Rando")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 28, height: 28)
+
+                        // Séparateur vertical
+                        Rectangle()
+                            .fill(Color.primary.opacity(0.2))
+                            .frame(width: 1, height: 20)
+
+                        // Icône info iOS native
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 16, weight: .regular))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+
+                if isHeaderExpanded {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Divider()
+                            .padding(.horizontal, 4)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("À propos")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.secondary)
+                                .textCase(.uppercase)
+
+                            Text("Découvrez les \(randoService.boucles.count) boucles de randonnée balisées de la Métropole de Lyon. Accessibles en transports en commun, ces sentiers vous invitent à explorer nature et patrimoine.")
+                                .font(.system(size: 14))
+                                .foregroundColor(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            HStack(spacing: 6) {
+                                Image(systemName: "building.columns")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+
+                                Text("Données ouvertes Grand Lyon")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.top, 4)
+
+                            Link(destination: URL(string: "https://data.grandlyon.com")!) {
+                                HStack(spacing: 4) {
+                                    Text("data.grandlyon.com")
+                                        .font(.system(size: 12, weight: .medium))
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.system(size: 10, weight: .semibold))
+                                }
+                                .foregroundColor(.blue)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 14)
+                    }
+                    .frame(width: 260)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .topTrailing)))
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(colorScheme == .dark ? .ultraThinMaterial : .regularMaterial)
+                    .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 2)
+            )
         }
-        
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            print("🌐 Tentative de connexion à l'API...")
-            guard let url = URL(string: apiURL) else {
-                throw RandoAPIError.invalidURL
-            }
-            
-            // Configuration avec timeout
-            var request = URLRequest(url: url)
-            request.timeoutInterval = 30.0 // 30 secondes de timeout
-            
-            let (data, response) = try await URLSession.shared.data(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse else {
-                throw RandoAPIError.invalidResponse
-            }
-            
-            print("📡 Réponse HTTP: \(httpResponse.statusCode)")
-            
-            guard httpResponse.statusCode == 200 else {
-                throw RandoAPIError.httpError(httpResponse.statusCode)
-            }
-            
-            print("📊 Taille des données reçues: \(data.count) bytes")
-            
-            let geoJsonResponse = try JSONDecoder().decode(RandoGeoJSONResponse.self, from: data)
-            
-            print("🔍 Nombre de features dans la réponse: \(geoJsonResponse.features.count)")
-            
-            let boucleLocations = geoJsonResponse.features.compactMap { feature -> BoucleLocation? in
-                guard !feature.geometry.coordinates.isEmpty else { return nil }
-                
-                let props = feature.properties
-                
-                // Extraction des coordonnées depuis MultiLineString
-                var allCoordinates: [CLLocationCoordinate2D] = []
-                
-                for lineString in feature.geometry.coordinates {
-                    for coordinate in lineString {
-                        if coordinate.count >= 2 {
-                            let longitude = coordinate[0]
-                            let latitude = coordinate[1]
-                            allCoordinates.append(CLLocationCoordinate2D(latitude: latitude, longitude: longitude))
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+    }
+
+    // MARK: - Îlot Boucle Flottant
+
+    @ViewBuilder
+    private var boucleIsland: some View {
+        VStack(spacing: 0) {
+            // Handle de drag
+            Capsule()
+                .fill(Color.secondary.opacity(0.4))
+                .frame(width: 36, height: 5)
+                .frame(maxWidth: .infinity)
+                .frame(height: 30)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture()
+                        .onEnded { value in
+                            withAnimation(IslandState.animation) {
+                                if value.translation.height < -50 {
+                                    if !isListMode {
+                                        isIslandExpanded = true
+                                    }
+                                } else if value.translation.height > 50 {
+                                    isListMode = false
+                                    isIslandExpanded = false
+                                }
+                            }
+                        }
+                )
+                .onTapGesture {
+                    if isListMode {
+                        withAnimation(IslandState.animation) {
+                            isListMode = false
+                        }
+                    } else {
+                        withAnimation(IslandState.animation) {
+                            isIslandExpanded.toggle()
                         }
                     }
                 }
-                
-                guard !allCoordinates.isEmpty else { return nil }
-                
-                // Calcul du centre de la boucle
-                let centerLat = allCoordinates.map { $0.latitude }.reduce(0, +) / Double(allCoordinates.count)
-                let centerLon = allCoordinates.map { $0.longitude }.reduce(0, +) / Double(allCoordinates.count)
-                let centerCoordinate = CLLocationCoordinate2D(latitude: centerLat, longitude: centerLon)
-                
-                return BoucleLocation(
-                    coordinates: allCoordinates,
-                    centerCoordinate: centerCoordinate,
-                    nom: props.nom ?? "Boucle de randonnée",
-                    commune: props.commune ?? "Non spécifiée",
-                    vocation: props.vocation ?? "",
-                    difficulte: props.difficulte ?? "Non spécifiée",
-                    temps: props.temps ?? "Non spécifié",
-                    longueur: props.longueur ?? "Non spécifiée",
-                    denivele: props.denivele ?? "Non spécifié",
-                    depart: props.depart ?? "Non spécifié",
-                    descriptif: props.descriptif ?? "",
-                    cheminement: props.cheminement ?? ""
-                )
+
+            // Contenu de l'îlot
+            if isListMode {
+                // Mode liste : afficher toutes les boucles
+                allBouclesListContent
+            } else if let boucle = selectedBoucle {
+                // Vue compacte ou étendue
+                if isIslandExpanded {
+                    expandedBoucleContent(boucle)
+                } else {
+                    compactBoucleContent(boucle)
+                }
+            } else {
+                // État de chargement
+                HStack(spacing: 12) {
+                    ProgressView()
+                    Text("Chargement des boucles...")
+                        .font(.system(size: 15))
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
             }
-            
-            boucles = boucleLocations
-            isLoading = false
-            
-            print("✅ \(boucles.count) boucles de randonnée chargées avec succès")
-            
-        } catch {
-            errorMessage = "Erreur de chargement: \(error.localizedDescription)"
-            isLoading = false
-            print("❌ Erreur chargement boucles: \(error)")
+        }
+        .frame(maxHeight: islandMaxHeight)
+        .background(
+            UnevenRoundedRectangle(
+                topLeadingRadius: islandCornerRadius,
+                bottomLeadingRadius: islandBottomRadius,
+                bottomTrailingRadius: islandBottomRadius,
+                topTrailingRadius: islandCornerRadius
+            )
+            .fill(colorScheme == .dark ? .ultraThinMaterial : .regularMaterial)
+            .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: -5)
+        )
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: islandCornerRadius,
+                bottomLeadingRadius: islandBottomRadius,
+                bottomTrailingRadius: islandBottomRadius,
+                topTrailingRadius: islandCornerRadius
+            )
+        )
+        .padding(.horizontal, islandHorizontalPadding)
+        .padding(.bottom, 0)
+        .animation(IslandState.animation, value: islandState)
+    }
+
+    // MARK: - Contenu Compact
+
+    @ViewBuilder
+    private func compactBoucleContent(_ boucle: BoucleLocation) -> some View {
+        VStack(spacing: 12) {
+            // Ligne principale
+            HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(boucle.nom)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+
+                    Text(boucle.commune)
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image("Rando")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 44, height: 44)
+            }
+
+            // Métriques compactes
+            HStack(spacing: 16) {
+                if let distance = distanceFromUser(to: boucle) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                        Text(distance)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                if !boucle.longueur.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "ruler")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                        Text(boucle.longueur)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                if !boucle.temps.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                        Text(boucle.temps)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+    }
+
+    // MARK: - Contenu Étendu
+
+    @ViewBuilder
+    private func expandedBoucleContent(_ boucle: BoucleLocation) -> some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                // En-tête
+                HStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(boucle.nom)
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundColor(.primary)
+
+                        Text(boucle.commune)
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    Image("Rando")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 56, height: 56)
+                }
+                .padding(.horizontal, 20)
+
+                // Métriques
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    BoucleMetricPill(icon: "ruler", value: boucle.longueur, label: "Distance")
+                    BoucleMetricPill(icon: "clock", value: boucle.temps, label: "Durée")
+                    BoucleMetricPill(icon: "arrow.up.right", value: boucle.denivele, label: "Dénivelé")
+                    BoucleMetricPill(icon: "figure.hiking", value: boucle.difficulte, label: "Difficulté")
+                }
+                .padding(.horizontal, 20)
+
+                // Distance utilisateur
+                if let distance = distanceFromUser(to: boucle) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+
+                        Text("À \(distance) de vous")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(.primary)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                }
+
+                // Point de départ
+                if !boucle.depart.isEmpty {
+                    BoucleInfoSection(title: "Point de départ", content: boucle.depart)
+                }
+
+                // Vocation
+                if !boucle.vocation.isEmpty {
+                    BoucleInfoSection(title: "Vocation", content: boucle.vocation)
+                }
+
+                // Description
+                if !boucle.descriptif.isEmpty {
+                    BoucleInfoSection(title: "Description", content: boucle.descriptif)
+                }
+
+                // Cheminement
+                if !boucle.cheminement.isEmpty {
+                    BoucleInfoSection(title: "Cheminement", content: boucle.cheminement)
+                }
+
+                // Bouton Itinéraire
+                Button(action: { openDirections(to: boucle) }) {
+                    Text("Itinéraire vers le départ")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.gray.opacity(0.15))
+                        )
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 50)
+            }
+            .padding(.top, 4)
         }
     }
+
+    // MARK: - Liste de toutes les boucles
+
+    @ViewBuilder
+    private var allBouclesListContent: some View {
+        VStack(spacing: 0) {
+            // Titre
+            HStack {
+                Text("Les 54 boucles")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.primary)
+
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
+
+            // Liste scrollable (boucle sélectionnée en premier)
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVStack(spacing: 0) {
+                    ForEach(sortedBoucles) { boucle in
+                        Button(action: {
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            selectedBoucle = boucle
+                            withAnimation(IslandState.animation) {
+                                isListMode = false
+                                isIslandExpanded = false
+                            }
+                            centerOnBoucle(boucle)
+                        }) {
+                            HStack(spacing: 14) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(boucle.nom)
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.primary)
+                                        .lineLimit(1)
+
+                                    HStack(spacing: 8) {
+                                        Text(boucle.commune)
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.secondary)
+
+                                        if !boucle.longueur.isEmpty {
+                                            Text("•")
+                                                .foregroundColor(.secondary)
+                                            Text(boucle.longueur)
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                }
+
+                                Spacer()
+
+                                if selectedBoucle?.id == boucle.id {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(.blue)
+                                } else {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 14)
+                        }
+
+                        if boucle.id != sortedBoucles.last?.id {
+                            Divider()
+                                .padding(.leading, 20)
+                        }
+                    }
+                }
+                .padding(.bottom, 40)
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func distanceFromUser(to boucle: BoucleLocation) -> String? {
+        guard let userLoc = locationService.userLocation else { return nil }
+        let userCL = CLLocation(latitude: userLoc.latitude, longitude: userLoc.longitude)
+        let boucleCL = CLLocation(latitude: boucle.centerCoordinate.latitude, longitude: boucle.centerCoordinate.longitude)
+        let distance = userCL.distance(from: boucleCL)
+        if distance < 1000 {
+            return "\(Int(distance)) m"
+        } else {
+            return String(format: "%.1f km", distance / 1000)
+        }
+    }
+
+    private func resetMapToNorth() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        let lyonCenter = CLLocationCoordinate2D(latitude: 45.7578, longitude: 4.8320)
+        withAnimation(.easeInOut(duration: 0.5)) {
+            cameraPosition = .camera(MapCamera(
+                centerCoordinate: selectedBoucle?.centerCoordinate ?? lyonCenter,
+                distance: 50000,
+                heading: 0,
+                pitch: 0
+            ))
+        }
+    }
+
+    private func recenterOnUser() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        guard let userLocation = locationService.userLocation else { return }
+        isMapCenteredOnUser = true
+        withAnimation(.easeInOut(duration: 0.5)) {
+            cameraPosition = .camera(MapCamera(
+                centerCoordinate: userLocation,
+                distance: 15000,
+                heading: 0,
+                pitch: 0
+            ))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            isMapCenteredOnUser = false
+        }
+    }
+
+    private func selectBoucle(_ boucle: BoucleLocation) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        selectedBoucle = boucle
+        centerOnBoucle(boucle)
+    }
+
+    private func centerOnBoucle(_ boucle: BoucleLocation) {
+        // Centre sur la boucle sans changer le zoom
+        withAnimation(.easeInOut(duration: 0.6)) {
+            cameraPosition = .camera(MapCamera(
+                centerCoordinate: boucle.centerCoordinate,
+                distance: 50000,
+                heading: 0,
+                pitch: 0
+            ))
+        }
+    }
+
+    private func focusOnBoucle(_ boucle: BoucleLocation) {
+        // Calculer le bounding box de la boucle
+        guard !boucle.coordinates.isEmpty else { return }
+
+        let lats = boucle.coordinates.map { $0.latitude }
+        let lons = boucle.coordinates.map { $0.longitude }
+
+        guard let minLat = lats.min(), let maxLat = lats.max(),
+              let minLon = lons.min(), let maxLon = lons.max() else { return }
+
+        let centerLat = (minLat + maxLat) / 2
+        let centerLon = (minLon + maxLon) / 2
+
+        let latSpan = maxLat - minLat
+        let lonSpan = maxLon - minLon
+        let maxSpan = max(latSpan, lonSpan)
+
+        // Calculer la distance en fonction de l'étendue
+        let distance = maxSpan * 111000 * 2.5 // Facteur pour avoir une marge
+
+        withAnimation(.easeInOut(duration: 0.6)) {
+            cameraPosition = .camera(MapCamera(
+                centerCoordinate: CLLocationCoordinate2D(latitude: centerLat, longitude: centerLon),
+                distance: max(distance, 3000),
+                heading: 0,
+                pitch: 0
+            ))
+        }
+    }
+
+    private func handleMapTap(at coordinate: CLLocationCoordinate2D) {
+        let tapLocation = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        let threshold: Double = 150
+
+        var closestBoucle: BoucleLocation?
+        var closestDistance: Double = .infinity
+
+        for boucle in randoService.boucles {
+            let distance = minDistanceToPolyline(from: tapLocation, polyline: boucle.coordinates)
+            if distance < closestDistance && distance < threshold {
+                closestDistance = distance
+                closestBoucle = boucle
+            }
+        }
+
+        if let boucle = closestBoucle {
+            selectBoucle(boucle)
+        }
+    }
+
+    private func minDistanceToPolyline(from point: CLLocation, polyline: [CLLocationCoordinate2D]) -> Double {
+        var minDistance: Double = .infinity
+        for coord in polyline {
+            let polylinePoint = CLLocation(latitude: coord.latitude, longitude: coord.longitude)
+            let distance = point.distance(from: polylinePoint)
+            minDistance = min(minDistance, distance)
+        }
+        return minDistance
+    }
+
+    private func openDirections(to boucle: BoucleLocation) {
+        let startCoordinate = boucle.coordinates.first ?? boucle.centerCoordinate
+        let placemark = MKPlacemark(coordinate: startCoordinate)
+        let mapItem = MKMapItem(placemark: placemark)
+        mapItem.name = "Départ: \(boucle.nom)"
+        mapItem.openInMaps(launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking
+        ])
+    }
 }
+
+// MARK: - Boucle Metric Pill
+
+struct BoucleMetricPill: View {
+    let icon: String
+    let value: String
+    let label: String
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value.isEmpty ? "—" : value)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(colorScheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.04))
+        )
+    }
+}
+
+// MARK: - Boucle Info Section
+
+struct BoucleInfoSection: View {
+    let title: String
+    let content: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+                .textCase(.uppercase)
+
+            Text(content)
+                .font(.system(size: 15))
+                .foregroundColor(.primary)
+                .lineSpacing(4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+    }
+}
+
+// MARK: - Boucle Location Model
 
 struct BoucleLocation: Identifiable {
     let id = UUID()
@@ -205,29 +925,88 @@ struct BoucleLocation: Identifiable {
     let cheminement: String
 }
 
+// MARK: - Rando API Service
+
+@MainActor
+class RandoAPIService: ObservableObject {
+    @Published var boucles: [BoucleLocation] = []
+    @Published var isLoading = false
+
+    private let apiURL = "https://data.grandlyon.com/geoserver/metropole-de-lyon/ows?SERVICE=WFS&VERSION=2.0.0&request=GetFeature&typename=metropole-de-lyon:boucle-de-randonnee&outputFormat=application/json&SRSNAME=EPSG:4171&startIndex=0&sortby=gid"
+
+    func loadBoucles() async {
+        guard !isLoading else { return }
+        isLoading = true
+
+        do {
+            guard let url = URL(string: apiURL) else { return }
+
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let geoJsonResponse = try JSONDecoder().decode(RandoGeoJSONResponse.self, from: data)
+
+            boucles = geoJsonResponse.features.compactMap { feature -> BoucleLocation? in
+                guard !feature.geometry.coordinates.isEmpty else { return nil }
+
+                var allCoordinates: [CLLocationCoordinate2D] = []
+                for lineString in feature.geometry.coordinates {
+                    for coordinate in lineString {
+                        if coordinate.count >= 2 {
+                            allCoordinates.append(CLLocationCoordinate2D(
+                                latitude: coordinate[1],
+                                longitude: coordinate[0]
+                            ))
+                        }
+                    }
+                }
+
+                guard !allCoordinates.isEmpty else { return nil }
+
+                let props = feature.properties
+                let centerLat = allCoordinates.map { $0.latitude }.reduce(0, +) / Double(allCoordinates.count)
+                let centerLon = allCoordinates.map { $0.longitude }.reduce(0, +) / Double(allCoordinates.count)
+
+                return BoucleLocation(
+                    coordinates: allCoordinates,
+                    centerCoordinate: CLLocationCoordinate2D(latitude: centerLat, longitude: centerLon),
+                    nom: props.nom ?? "Boucle sans nom",
+                    commune: props.commune ?? "",
+                    vocation: props.vocation ?? "",
+                    difficulte: props.difficulte ?? "",
+                    temps: props.temps ?? "",
+                    longueur: props.longueur ?? "",
+                    denivele: props.denivele ?? "",
+                    depart: props.depart ?? "",
+                    descriptif: props.descriptif ?? "",
+                    cheminement: props.cheminement ?? ""
+                )
+            }
+
+            isLoading = false
+        } catch {
+            isLoading = false
+        }
+    }
+}
+
+// MARK: - GeoJSON Models
+
 struct RandoGeoJSONResponse: Codable {
-    let type: String
     let features: [RandoFeature]
-    let totalFeatures: Int?
 }
 
 struct RandoFeature: Codable {
-    let type: String
     let geometry: RandoGeometry
     let properties: RandoProperties
 }
 
 struct RandoGeometry: Codable {
-    let type: String
     let coordinates: [[[Double]]]
 }
 
 struct RandoProperties: Codable {
-    let identifiant: Int?
     let nom: String?
     let vocation: String?
     let commune: String?
-    let insee: String?
     let difficulte: String?
     let temps: String?
     let longueur: String?
@@ -237,981 +1016,6 @@ struct RandoProperties: Codable {
     let cheminement: String?
 }
 
-enum RandoAPIError: Error, LocalizedError {
-    case invalidURL
-    case invalidResponse
-    case httpError(Int)
-    
-    var errorDescription: String? {
-        switch self {
-        case .invalidURL:
-            return "URL invalide"
-        case .invalidResponse:
-            return "Réponse serveur invalide"
-        case .httpError(let code):
-            return "Erreur HTTP \(code)"
-        }
-    }
-}
-
-// MARK: - Vue principale
-extension RandosMapView {
-    var body: some View {
-        ZStack {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 0) {
-                    // Titre en haut
-                    HStack(spacing: 12) {
-                        Image("Rando")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 50, height: 50)
-                            .foregroundColor(randoThemeColor)
-                        
-                        Text("Boucles de Randonnée")
-                            .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(.primary)
-                        
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 10)
-                    .padding(.bottom, 20)
-                    
-                    // Carte
-                    RandoMapBoxView(
-                        region: $region,
-                        boucles: randoService.boucles,
-                        userLocation: locationService.userLocation,
-                        isLoading: randoService.isLoading,
-                        themeColor: randoThemeColor,
-                        onBoucleSelected: { boucle in
-                            print("🎯 Boucle sélectionnée: \(boucle.nom)")
-                            selectedBoucle = boucle
-                            showBoucleDetail = true
-                        }
-                    )
-                    .padding(.horizontal)
-                    .padding(.bottom, 16)
-                    
-                    // Section de TOUTES les boucles triées par distance
-                    if !nearestBoucles.isEmpty {
-                        NearestBouclesView(
-                            boucles: nearestBoucles,
-                            userLocation: locationService.userLocation,
-                            themeColor: randoThemeColor,
-                            onBoucleSelected: { boucle in
-                                print("🎯 Boucle sélectionnée: \(boucle.nom)")
-                                selectedBoucle = boucle
-                                showBoucleDetail = true
-                            }
-                        )
-                        .padding(.horizontal)
-                        .padding(.bottom, 30)
-                    }
-                    
-                    // Espace pour le menu en bas
-                    Spacer(minLength: 120)
-                }
-            }
-            .background(Color(red: 248/255, green: 247/255, blue: 244/255))
-            .refreshable {
-                await randoService.loadBoucles()
-            }
-            
-            // Menu fixe en bas
-            FixedBottomMenuView(
-                isMenuExpanded: $navigationManager.isMenuExpanded,
-                showToiletsMap: $navigationManager.showToiletsMap,
-                showBancsMap: $navigationManager.showBancsMap,
-                showFontainesMap: $navigationManager.showFontainesMap,
-                showSilosMap: $navigationManager.showSilosMap,
-                showBornesMap: $navigationManager.showBornesMap,
-                showCompostMap: $navigationManager.showCompostMap,
-                showParcsMap: $navigationManager.showParcsMap,
-                showPoubelleMap: $navigationManager.showPoubelleMap,
-                showRandosMap: $navigationManager.showRandosMap,
-                onHomeSelected: {
-                    navigationManager.navigateToHome()
-                },
-                themeColor: randoThemeColor
-            )
-        }
-        .onAppear {
-            navigationManager.currentDestination = "randos"
-            
-            // Initialiser seulement la première fois
-            if !hasInitialized {
-                setupInitialLocation()
-                hasInitialized = true
-                
-                if randoService.boucles.isEmpty && !randoService.isLoading {
-                    loadBoucles()
-                }
-            }
-        }
-        .onDisappear {
-            locationService.stopLocationUpdates()
-        }
-        // ✅ Ajout de onChange avec vérification distance Lyon
-        .onChange(of: locationService.isLocationReady) { isReady in
-            if isReady, let location = locationService.userLocation {
-                // Centrer seulement si on n'a pas encore initialisé
-                if !hasInitialized {
-                    let lyonCenter = CLLocationCoordinate2D(latitude: 45.7578, longitude: 4.8320)
-                    let userCLLocation = CLLocation(latitude: location.latitude, longitude: location.longitude)
-                    let lyonCLLocation = CLLocation(latitude: lyonCenter.latitude, longitude: lyonCenter.longitude)
-                    let distanceFromLyon = userCLLocation.distance(from: lyonCLLocation)
-                    
-                    if distanceFromLyon > 50000 {
-                        // Utilisateur trop loin - centrer sur Lyon avec vue large
-                        print("🌍 Randos: Mise à jour - utilisateur trop loin (\(Int(distanceFromLyon/1000))km), centrage sur Lyon")
-                        centerMapOnLyon()
-                    } else {
-                        // Utilisateur proche - centrer sur sa position
-                        print("📍 Randos: Mise à jour - utilisateur proche (\(Int(distanceFromLyon/1000))km), centrage sur position")
-                        centerMapOnLocation(location)
-                    }
-                }
-            }
-        }
-        .overlay {
-            if randoService.isLoading && randoService.boucles.isEmpty {
-                RandoLoadingOverlayView(themeColor: randoThemeColor)
-            }
-        }
-        .overlay {
-            if let errorMessage = randoService.errorMessage {
-                RandoErrorOverlayView(message: errorMessage, themeColor: randoThemeColor) {
-                    loadBoucles()
-                }
-            }
-        }
-        .sheet(isPresented: $showBoucleDetail) {
-            if let boucle = selectedBoucle {
-                BoucleDetailModalView(
-                    boucle: boucle,
-                    userLocation: locationService.userLocation,
-                    themeColor: randoThemeColor
-                )
-            }
-        }
-        .onChange(of: showBoucleDetail) { isShowing in
-            print("📱 État modale: \(isShowing ? "Ouverte" : "Fermée")")
-            if !isShowing {
-                // Reset de la boucle sélectionnée après fermeture
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    selectedBoucle = nil
-                }
-            }
-        }
-    }
-    
-    // ✅ Ajout des fonctions comme dans BornesMapView
-    private func setupInitialLocation() {
-        print("🗺️ Setup initial - randos")
-        
-        if locationService.userLocation == nil {
-            print("🔄 Position pas encore disponible, refresh en cours...")
-            locationService.refreshLocation()
-        } else {
-            print("✅ Position déjà disponible depuis l'init")
-        }
-    }
-    
-    private func centerMapOnLocation(_ coordinate: CLLocationCoordinate2D) {
-        withAnimation(.easeInOut(duration: 0.5)) {
-            region.center = coordinate
-            region.span = MKCoordinateSpan(latitudeDelta: 0.07, longitudeDelta: 0.07)
-        }
-    }
-    
-    // ✅ Nouvelle fonction pour centrer sur Lyon avec vue large
-    private func centerMapOnLyon() {
-        let lyonCenter = CLLocationCoordinate2D(latitude: 45.7578, longitude: 4.8320)
-        withAnimation(.easeInOut(duration: 0.5)) {
-            region.center = lyonCenter
-            region.span = MKCoordinateSpan(latitudeDelta: 0.6, longitudeDelta: 0.6)
-        }
-    }
-    
-    private func loadBoucles() {
-        Task {
-            await randoService.loadBoucles()
-        }
-    }
-}
-
-// MARK: - Section toutes les boucles triées par distance
-struct NearestBouclesView: View {
-    let boucles: [BoucleLocation]
-    let userLocation: CLLocationCoordinate2D?
-    let themeColor: Color
-    let onBoucleSelected: (BoucleLocation) -> Void
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(userLocation != nil ? "Boucles les plus proches" : "Toutes les boucles")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-            }
-            .padding(.horizontal)
-            .padding(.top)
-            
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(boucles) { boucle in
-                        NearestBoucleRowView(
-                            boucle: boucle,
-                            userLocation: userLocation,
-                            themeColor: themeColor,
-                            onBoucleSelected: onBoucleSelected
-                        )
-                    }
-                }
-                .padding(.horizontal)
-            }
-            .frame(maxHeight: 400) // Limiter la hauteur pour éviter que ça prenne tout l'écran
-            .padding(.bottom)
-        }
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: themeColor.opacity(0.3), radius: 8, x: 0, y: 4)
-    }
-}
-
-struct NearestBoucleRowView: View {
-    let boucle: BoucleLocation
-    let userLocation: CLLocationCoordinate2D?
-    let themeColor: Color
-    let onBoucleSelected: (BoucleLocation) -> Void
-    
-    private var distance: String? {
-        guard let userLocation = userLocation else { return nil }
-        
-        let userCLLocation = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
-        let boucleLocation = CLLocation(latitude: boucle.centerCoordinate.latitude, longitude: boucle.centerCoordinate.longitude)
-        let distanceInMeters = userCLLocation.distance(from: boucleLocation)
-        
-        if distanceInMeters < 1000 {
-            return "\(Int(distanceInMeters))m"
-        } else {
-            return String(format: "%.1fkm", distanceInMeters / 1000)
-        }
-    }
-    
-    var body: some View {
-        Button(action: {
-            onBoucleSelected(boucle)
-        }) {
-            HStack(spacing: 12) {
-                Image("Rando")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 48, height: 48)
-                    .foregroundColor(themeColor)
-                
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(boucle.nom)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .foregroundColor(.primary)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
-                    
-                    Text(boucle.commune)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2)
-                }
-                
-                Spacer()
-                
-                VStack(spacing: 8) {
-                    if let distance = distance {
-                        Text(distance)
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(themeColor)
-                    }
-                    
-                    Image(systemName: "info.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundColor(.white)
-                        .frame(width: 32, height: 32)
-                        .background(themeColor)
-                        .clipShape(Circle())
-                }
-            }
-        }
-        .padding()
-        .background(Color(.systemGray6).opacity(0.5))
-        .cornerRadius(12)
-    }
-}
-
-// MARK: - Composant carte
-struct RandoMapBoxView: View {
-    @Binding var region: MKCoordinateRegion
-    let boucles: [BoucleLocation]
-    let userLocation: CLLocationCoordinate2D?
-    let isLoading: Bool
-    let themeColor: Color
-    let onBoucleSelected: (BoucleLocation) -> Void
-    
-    var body: some View {
-        VStack(spacing: 0) {
-            // En-tête avec nombre de boucles et bouton "Ma position"
-            HStack {
-                Text("Carte des boucles (\(boucles.count))")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-                
-                HStack(spacing: 8) {
-                    if isLoading {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                            .tint(themeColor)
-                    }
-                    
-                    Button(action: {
-                        centerOnUserLocation()
-                    }) {
-                        HStack(spacing: 4) {
-                            Group {
-                                if userLocation != nil {
-                                    Image(systemName: "location.fill")
-                                        .foregroundColor(.green)
-                                } else {
-                                    Image(systemName: "location.slash")
-                                        .foregroundColor(.orange)
-                                }
-                            }
-                            
-                            Text("Ma position")
-                                .font(.caption)
-                        }
-                        .foregroundColor(userLocation != nil ? .green : .orange)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(themeColor.opacity(0.1))
-                        .cornerRadius(16)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(themeColor.opacity(0.3), lineWidth: 1)
-                        )
-                    }
-                }
-            }
-            .padding()
-            .background(themeColor.opacity(0.2))
-            
-            // Map sans annotations de recherche
-            Map(coordinateRegion: $region,
-                interactionModes: [.pan, .zoom],
-                showsUserLocation: true)
-            .overlay(
-                RandoClickablePolylinesOverlay(
-                    region: $region,
-                    boucles: boucles,
-                    themeColor: themeColor,
-                    onBoucleSelected: onBoucleSelected
-                )
-            )
-            .frame(height: 350)
-        }
-        .background(Color(.systemBackground))
-        .cornerRadius(16)
-        .shadow(color: themeColor.opacity(0.3), radius: 8, x: 0, y: 4)
-    }
-    
-    private func centerOnUserLocation() {
-        guard let userLocation = userLocation else { return }
-        
-        // ✅ Vérifier si l'utilisateur est proche de Lyon
-        let lyonCenter = CLLocationCoordinate2D(latitude: 45.7578, longitude: 4.8320)
-        let userCLLocation = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
-        let lyonCLLocation = CLLocation(latitude: lyonCenter.latitude, longitude: lyonCenter.longitude)
-        let distanceFromLyon = userCLLocation.distance(from: lyonCLLocation)
-        
-        if distanceFromLyon > 50000 {
-            print("📍 Bouton position: Utilisateur trop loin (\(Int(distanceFromLyon/1000))km) - centrage sur Lyon")
-            withAnimation(.easeInOut(duration: 0.5)) {
-                region.center = lyonCenter
-                region.span = MKCoordinateSpan(latitudeDelta: 0.6, longitudeDelta: 0.6)
-            }
-        } else {
-            print("📍 Bouton position: Centrage sur position utilisateur (\(Int(distanceFromLyon/1000))km de Lyon)")
-            withAnimation(.easeInOut(duration: 0.5)) {
-                region.center = userLocation
-                region.span = MKCoordinateSpan(latitudeDelta: 0.07, longitudeDelta: 0.07)
-            }
-        }
-    }
-}
-
-// MARK: - Overlay avec polylines cliquables
-struct RandoClickablePolylinesOverlay: UIViewRepresentable {
-    @Binding var region: MKCoordinateRegion
-    let boucles: [BoucleLocation]
-    let themeColor: Color
-    let onBoucleSelected: (BoucleLocation) -> Void
-    
-    func makeUIView(context: Context) -> MKMapView {
-        let mapView = MKMapView()
-        mapView.delegate = context.coordinator
-        mapView.isUserInteractionEnabled = true
-        mapView.backgroundColor = .clear
-        
-        let tapGesture = UITapGestureRecognizer(target: context.coordinator, action: #selector(context.coordinator.handleMapTap(_:)))
-        mapView.addGestureRecognizer(tapGesture)
-        
-        return mapView
-    }
-    
-    func updateUIView(_ mapView: MKMapView, context: Context) {
-        // ✅ MODIFICATION: Ne forcer la région QUE si c'est un changement important
-        let currentCenter = mapView.region.center
-        let targetCenter = region.center
-        
-        // Calculer la distance entre les centres
-        let distance = CLLocation(latitude: currentCenter.latitude, longitude: currentCenter.longitude)
-            .distance(from: CLLocation(latitude: targetCenter.latitude, longitude: targetCenter.longitude))
-        
-        // Ne forcer la région que si la distance est > 1km (changement intentionnel)
-        if distance > 1000 {
-            print("🗺️ Mise à jour région forcée - distance: \(distance)m")
-            mapView.setRegion(region, animated: true)
-        }
-        
-        // Toujours mettre à jour les overlays
-        mapView.removeOverlays(mapView.overlays)
-        
-        for boucle in boucles {
-            // Bordure pour le contraste
-            let borderPolyline = MKPolyline(coordinates: boucle.coordinates, count: boucle.coordinates.count)
-            borderPolyline.title = "\(boucle.id.uuidString)_border"
-            mapView.addOverlay(borderPolyline)
-            
-            // Ligne principale cliquable
-            let mainPolyline = ClickableMKPolyline(coordinates: boucle.coordinates, count: boucle.coordinates.count)
-            mainPolyline.boucle = boucle
-            mainPolyline.title = boucle.id.uuidString
-            mapView.addOverlay(mainPolyline)
-        }
-        
-        context.coordinator.onBoucleSelected = onBoucleSelected
-    }
-    
-    func makeCoordinator() -> Coordinator {
-        Coordinator(themeColor: themeColor)
-    }
-    
-    class Coordinator: NSObject, MKMapViewDelegate {
-        let themeColor: Color
-        var onBoucleSelected: ((BoucleLocation) -> Void)?
-        
-        init(themeColor: Color) {
-            self.themeColor = themeColor
-        }
-        
-        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
-            if let polyline = overlay as? MKPolyline {
-                let renderer = MKPolylineRenderer(polyline: polyline)
-                
-                if polyline.title?.hasSuffix("_border") == true {
-                    renderer.strokeColor = UIColor.darkGray.withAlphaComponent(0.6)
-                    renderer.lineWidth = 8.0
-                    renderer.alpha = 1.0
-                } else {
-                    renderer.strokeColor = UIColor(themeColor)
-                    renderer.lineWidth = 6.0
-                    renderer.alpha = 0.9
-                }
-                
-                renderer.lineCap = .round
-                renderer.lineJoin = .round
-                
-                return renderer
-            }
-            return MKOverlayRenderer()
-        }
-        
-        @objc func handleMapTap(_ gesture: UITapGestureRecognizer) {
-            let mapView = gesture.view as! MKMapView
-            let touchPoint = gesture.location(in: mapView)
-            let coordinate = mapView.convert(touchPoint, toCoordinateFrom: mapView)
-            
-            var closestBoucle: BoucleLocation?
-            var minDistance: Double = Double.infinity
-            
-            for overlay in mapView.overlays {
-                if let clickablePolyline = overlay as? ClickableMKPolyline,
-                   let boucle = clickablePolyline.boucle {
-                    
-                    let distance = distanceFromCoordinateToPolyline(coordinate, polyline: clickablePolyline)
-                    
-                    if distance < 100 && distance < minDistance {
-                        minDistance = distance
-                        closestBoucle = boucle
-                    }
-                }
-            }
-            
-            if let boucle = closestBoucle {
-                onBoucleSelected?(boucle)
-            }
-        }
-        
-        private func distanceFromCoordinateToPolyline(_ coordinate: CLLocationCoordinate2D, polyline: MKPolyline) -> Double {
-            let point = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
-            var minDistance: Double = Double.infinity
-            
-            let coordinates = polyline.coordinates()
-            for i in 0..<coordinates.count - 1 {
-                let start = CLLocation(latitude: coordinates[i].latitude, longitude: coordinates[i].longitude)
-                let end = CLLocation(latitude: coordinates[i + 1].latitude, longitude: coordinates[i + 1].longitude)
-                
-                let distance = distanceFromPointToLineSegment(point: point, start: start, end: end)
-                minDistance = min(minDistance, distance)
-            }
-            
-            return minDistance
-        }
-        
-        private func distanceFromPointToLineSegment(point: CLLocation, start: CLLocation, end: CLLocation) -> Double {
-            let startDistance = point.distance(from: start)
-            let endDistance = point.distance(from: end)
-            let segmentDistance = start.distance(from: end)
-            
-            if segmentDistance < 1 {
-                return min(startDistance, endDistance)
-            }
-            
-            let dx = end.coordinate.longitude - start.coordinate.longitude
-            let dy = end.coordinate.latitude - start.coordinate.latitude
-            
-            let px = point.coordinate.longitude - start.coordinate.longitude
-            let py = point.coordinate.latitude - start.coordinate.latitude
-            
-            let dotProduct = px * dx + py * dy
-            let lengthSquared = dx * dx + dy * dy
-            
-            let t = max(0, min(1, dotProduct / lengthSquared))
-            
-            let projectionLat = start.coordinate.latitude + t * dy
-            let projectionLon = start.coordinate.longitude + t * dx
-            let projection = CLLocation(latitude: projectionLat, longitude: projectionLon)
-            
-            return point.distance(from: projection)
-        }
-    }
-}
-
-// MARK: - Polyline cliquable avec référence à la boucle
-class ClickableMKPolyline: MKPolyline {
-    var boucle: BoucleLocation?
-}
-
-// MARK: - Extension pour récupérer les coordonnées d'une MKPolyline
-extension MKPolyline {
-    func coordinates() -> [CLLocationCoordinate2D] {
-        var coords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: pointCount)
-        getCoordinates(&coords, range: NSRange(location: 0, length: pointCount))
-        return coords
-    }
-}
-
-// MARK: - Extension pour comparer les coordonnées
-extension CLLocationCoordinate2D {
-    func isEqual(to coordinate: CLLocationCoordinate2D, tolerance: Double) -> Bool {
-        return abs(self.latitude - coordinate.latitude) < tolerance &&
-               abs(self.longitude - coordinate.longitude) < tolerance
-    }
-}
-
-// MARK: - Modale détail de boucle
-struct BoucleDetailModalView: View {
-    let boucle: BoucleLocation
-    let userLocation: CLLocationCoordinate2D?
-    let themeColor: Color
-    @Environment(\.dismiss) private var dismiss
-    @State private var showNavigationAlert = false
-    
-    private var distance: String? {
-        guard let userLocation = userLocation else { return nil }
-        
-        let userCLLocation = CLLocation(latitude: userLocation.latitude, longitude: userLocation.longitude)
-        let boucleLocation = CLLocation(latitude: boucle.centerCoordinate.latitude, longitude: boucle.centerCoordinate.longitude)
-        let distanceInMeters = userCLLocation.distance(from: boucleLocation)
-        
-        if distanceInMeters < 1000 {
-            return "\(Int(distanceInMeters)) m"
-        } else {
-            return String(format: "%.1f km", distanceInMeters / 1000)
-        }
-    }
-    
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Header avec icône et titre
-                    VStack(spacing: 12) {
-                        Image("Rando")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 80, height: 80)
-                            .foregroundColor(themeColor)
-                        
-                        Text(boucle.nom)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.primary)
-                        
-                        Text(boucle.commune)
-                            .font(.title3)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding()
-                    .background(themeColor.opacity(0.1))
-                    .cornerRadius(16)
-                    
-                    // Stats avec emojis - disposition 3+2
-                    VStack(spacing: 16) {
-                        // Première ligne : 3 cartes
-                        HStack(spacing: 12) {
-                            EmojiStatCard(
-                                emoji: "🥾",
-                                title: "Distance",
-                                value: boucle.longueur
-                            )
-                            
-                            EmojiStatCard(
-                                emoji: "⏱️",
-                                title: "Durée",
-                                value: boucle.temps
-                            )
-                            
-                            EmojiStatCard(
-                                emoji: "⛰️",
-                                title: "Dénivelé",
-                                value: boucle.denivele
-                            )
-                        }
-                        
-                        // Deuxième ligne : 2 cartes
-                        HStack(spacing: 12) {
-                            EmojiStatCard(
-                                emoji: "📊",
-                                title: "Difficulté",
-                                value: boucle.difficulte
-                            )
-                            
-                            // Distance de l'utilisateur si disponible
-                            if let distance = distance {
-                                EmojiStatCard(
-                                    emoji: "🧭",
-                                    title: "Distance de vous",
-                                    value: distance
-                                )
-                            } else {
-                                Spacer()
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                    
-                    // Point de départ
-                    if !boucle.depart.isEmpty && boucle.depart != "Non spécifié" {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "flag.fill")
-                                    .foregroundColor(.red)
-                                Text("Point de départ")
-                                    .font(.headline)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                            }
-                            
-                            Text(boucle.depart)
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.leading)
-                        }
-                        .padding()
-                        .background(themeColor.opacity(0.1))
-                        .cornerRadius(16)
-                        .padding(.horizontal)
-                    }
-                    
-                    // Description
-                    if !boucle.descriptif.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "doc.text")
-                                    .foregroundColor(themeColor)
-                                Text("Description")
-                                    .font(.headline)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                            }
-                            
-                            Text(boucle.descriptif)
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.leading)
-                        }
-                        .padding()
-                        .background(themeColor.opacity(0.1))
-                        .cornerRadius(16)
-                        .padding(.horizontal)
-                    }
-                    
-                    // Cheminement
-                    if !boucle.cheminement.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "map")
-                                    .foregroundColor(themeColor)
-                                Text("Itinéraire")
-                                    .font(.headline)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                            }
-                            
-                            Text(boucle.cheminement)
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.leading)
-                        }
-                        .padding()
-                        .background(themeColor.opacity(0.1))
-                        .cornerRadius(16)
-                        .padding(.horizontal)
-                    }
-                    
-                    // Vocation
-                    if !boucle.vocation.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Image(systemName: "person.2")
-                                    .foregroundColor(themeColor)
-                                Text("Vocation")
-                                    .font(.headline)
-                                    .foregroundColor(.primary)
-                                Spacer()
-                            }
-                            
-                            Text(boucle.vocation)
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding()
-                        .background(themeColor.opacity(0.1))
-                        .cornerRadius(16)
-                        .padding(.horizontal)
-                    }
-                    
-                    // Bouton navigation
-                    Button(action: {
-                        showNavigationAlert = true
-                    }) {
-                        HStack {
-                            Image(systemName: "location.north.fill")
-                                .font(.title2)
-                            Text("Ouvrir la navigation")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(themeColor)
-                        .cornerRadius(12)
-                    }
-                    .padding(.horizontal)
-                    .padding(.bottom, 20)
-                }
-            }
-            .navigationBarTitle("Détails de la boucle", displayMode: .inline)
-            .navigationBarItems(trailing:
-                Button("Fermer") {
-                    dismiss()
-                }
-                .foregroundColor(themeColor)
-            )
-        }
-        .alert("Navigation", isPresented: $showNavigationAlert) {
-            Button("Ouvrir dans Plans") {
-                openNavigationToBoucle()
-            }
-            Button("Annuler", role: .cancel) { }
-        } message: {
-            Text("Voulez-vous ouvrir la navigation vers cette boucle de randonnée ?")
-        }
-    }
-    
-    private func openNavigationToBoucle() {
-        let coordinate = boucle.centerCoordinate
-        let placemark = MKPlacemark(coordinate: coordinate)
-        let mapItem = MKMapItem(placemark: placemark)
-        
-        mapItem.name = boucle.nom
-        
-        let launchOptions: [String: Any] = [
-            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeWalking,
-            MKLaunchOptionsShowsTrafficKey: false
-        ]
-        
-        mapItem.openInMaps(launchOptions: launchOptions)
-    }
-}
-
-// MARK: - Carte avec emoji pour les stats
-struct EmojiStatCard: View {
-    let emoji: String
-    let title: String
-    let value: String
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            Text(emoji)
-                .font(.system(size: 34))
-            
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-            
-            Text(value)
-                .font(.body)
-                .fontWeight(.semibold)
-                .foregroundColor(.primary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(red: 0xD4/255.0, green: 0xBE/255.0, blue: 0xA0/255.0).opacity(0.1))
-        .cornerRadius(16)
-    }
-}
-
-// MARK: - Pin de recherche
-struct RandoSearchPinMarker: View {
-    var body: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                Circle()
-                    .fill(Color.red)
-                    .frame(width: 30, height: 30)
-                    .shadow(radius: 3)
-                
-                Image(systemName: "location.fill")
-                    .foregroundColor(.white)
-                    .font(.system(size: 16, weight: .bold))
-            }
-            
-            Rectangle()
-                .fill(Color.red)
-                .frame(width: 3, height: 10)
-            
-            Path { path in
-                path.move(to: CGPoint(x: 0, y: 0))
-                path.addLine(to: CGPoint(x: 3, y: 5))
-                path.addLine(to: CGPoint(x: -3, y: 5))
-                path.closeSubpath()
-            }
-            .fill(Color.red)
-            .frame(width: 6, height: 5)
-        }
-        .scaleEffect(1.2)
-    }
-}
-
-// MARK: - Composants d'overlay
-struct RandoLoadingOverlayView: View {
-    let themeColor: Color
-    
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.3)
-                .ignoresSafeArea()
-            
-            VStack(spacing: 16) {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .tint(themeColor)
-                
-                Text("Chargement des boucles...")
-                    .font(.headline)
-                    .foregroundColor(.primary)
-            }
-            .padding(24)
-            .background(Color(.systemBackground))
-            .cornerRadius(16)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(themeColor.opacity(0.3), lineWidth: 2)
-            )
-            .shadow(color: themeColor.opacity(0.3), radius: 8)
-        }
-    }
-}
-
-struct RandoErrorOverlayView: View {
-    let message: String
-    let themeColor: Color
-    let onRetry: () -> Void
-    
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.3)
-                .ignoresSafeArea()
-            
-            VStack(spacing: 16) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 40))
-                    .foregroundColor(.red)
-                
-                Text("Erreur")
-                    .font(.headline)
-                
-                Text(message)
-                    .font(.body)
-                    .multilineTextAlignment(.center)
-                    .foregroundColor(.gray)
-                
-                Button("Réessayer") {
-                    onRetry()
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 10)
-                .background(themeColor)
-                .foregroundColor(.white)
-                .cornerRadius(8)
-            }
-            .padding(24)
-            .background(Color(.systemBackground))
-            .cornerRadius(16)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(themeColor.opacity(0.3), lineWidth: 2)
-            )
-            .shadow(color: themeColor.opacity(0.3), radius: 8)
-        }
-    }
-}
-
-// MARK: - Preview
 #Preview {
     RandosMapView()
 }

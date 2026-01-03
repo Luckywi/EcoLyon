@@ -2,438 +2,298 @@
 //  NavigationManager.swift
 //  EcoLyon
 //
-//  Gestion centralisée de la navigation, enrichie pour la nouvelle page "Fontaines"
+//  Gestion centralisée de la navigation avec enum
 //
 
 import SwiftUI
 
-// MARK: - NavigationManager CORRIGÉ
+// MARK: - Destination Enum
+enum Destination: String, CaseIterable, Identifiable {
+    case home
+    case toilets
+    case bancs
+    case fontaines
+    case randos
+    case silos
+    case bornes
+    case compost
+    case parcs
+    case poubelle
+    case composteurGratuit
+    case compostGuide
+    case lyonFacts
+
+    var id: String { rawValue }
+
+    // MARK: - Couleur thématique pour chaque destination
+    var themeColor: Color {
+        switch self {
+        case .home:
+            return Color.clear
+        case .toilets:
+            return Color(red: 0.7, green: 0.7, blue: 0.7)
+        case .bancs:
+            return Color(red: 0.7, green: 0.5, blue: 0.4)
+        case .fontaines:
+            return Color(red: 0xA5/255.0, green: 0xB2/255.0, blue: 0xA2/255.0).opacity(0.6)
+        case .randos:
+            return Color(red: 0.2, green: 0.6, blue: 0.2)
+        case .silos:
+            return Color(red: 0.5, green: 0.7, blue: 0.7)
+        case .bornes:
+            return Color(red: 0.5, green: 0.6, blue: 0.7)
+        case .compost:
+            return Color(red: 0.5, green: 0.35, blue: 0.25)
+        case .parcs:
+            return Color(red: 0xAF/255.0, green: 0xD0/255.0, blue: 0xA3/255.0)
+        case .poubelle:
+            return Color(red: 0.6, green: 0.6, blue: 0.6)
+        case .composteurGratuit:
+            return Color(red: 0.5, green: 0.35, blue: 0.25)
+        case .compostGuide:
+            return Color(red: 0.5, green: 0.35, blue: 0.25)
+        case .lyonFacts:
+            return Color.blue.opacity(0.3)
+        }
+    }
+
+    // MARK: - Emoji pour debug
+    var emoji: String {
+        switch self {
+        case .home: return "🏠"
+        case .toilets: return "🚽"
+        case .bancs: return "🪑"
+        case .fontaines: return "⛲"
+        case .randos: return "🥾"
+        case .silos: return "🗂️"
+        case .bornes: return "🔌"
+        case .compost: return "🗑️"
+        case .parcs: return "🌳"
+        case .poubelle: return "🗑️"
+        case .composteurGratuit: return "♻️"
+        case .compostGuide: return "📖"
+        case .lyonFacts: return "📍"
+        }
+    }
+
+    // MARK: - Est-ce une MapView (fullscreen cover)
+    var isMapView: Bool {
+        switch self {
+        case .home:
+            return false
+        case .toilets, .bancs, .fontaines, .randos, .silos, .bornes, .compost, .parcs, .poubelle:
+            return true
+        case .composteurGratuit, .compostGuide, .lyonFacts:
+            return true // Ce sont aussi des fullscreen covers
+        }
+    }
+}
+
+// MARK: - NavigationManager Refactorisé
 @MainActor
 class NavigationManager: ObservableObject {
     static let shared = NavigationManager()
-    
-    @Published var currentDestination: String = "home"
+
+    // MARK: - État principal
+    @Published var currentDestination: Destination = .home
+    @Published var presentedDestination: Destination? = nil
     @Published var isMenuExpanded = false
-    
-    // ✅ ÉTATS CENTRALISÉS - AJOUT DES FONTAINES
-    @Published var showToiletsMap = false
-    @Published var showBancsMap = false
-    @Published var showFontainesMap = false
-    @Published var showRandosMap = false
-    @Published var showSilosMap = false
-    @Published var showBornesMap = false
-    @Published var showCompostMap = false
-    @Published var showParcsMap = false
-    @Published var showPoubelleMap = false
-    @Published var showComposteurGratuitView = false
-    @Published var showCompostGuideView = false
-    @Published var showLyonFactsView = false
-    
-    // ✅ État pour gérer les transitions
-    @Published var isTransitioning = false
-    
+    @Published private(set) var isTransitioning = false
+
     private init() {}
-    
-    // ✅ MÉTHODE GÉNÉRIQUE POUR FERMER TOUTES LES VUES
-    private func closeAllMaps() {
-        showToiletsMap = false
-        showBancsMap = false
-        showFontainesMap = false
-        showRandosMap = false
-        showSilosMap = false
-        showBornesMap = false
-        showCompostMap = false
-        showParcsMap = false
-        showPoubelleMap = false
-    }
-    
-    // MARK: - NAVIGATION VERS LES DIFFÉRENTES VUES
-    
-    func navigateToLyonFacts() {
-        showLyonFactsView = true
+
+    // MARK: - Computed Properties
+
+    /// Couleur du thème actuel
+    var currentThemeColor: Color? {
+        guard currentDestination != .home else { return nil }
+        return currentDestination.themeColor
     }
 
-    func closeLyonFacts() {
-        showLyonFactsView = false
-    }
-    
-    
-    func navigateToCompostGuide() {
-        showCompostGuideView = true
+    /// Est-on sur la page d'accueil ?
+    var isOnHomePage: Bool {
+        currentDestination == .home && presentedDestination == nil
     }
 
-    func closeCompostGuide() {
-        showCompostGuideView = false
-    }
-    
-    
+    // MARK: - Navigation principale
 
-    // ✅ CORRECTION : composteurGratuit se comporte maintenant comme compostGuide
-    func navigateToComposteurGratuit() {
-        showComposteurGratuitView = true
+    /// Naviguer vers une destination
+    func navigate(to destination: Destination) {
+        guard !isTransitioning else {
+            print("⚠️ Navigation bloquée - transition en cours")
+            return
+        }
+
+        print("\(destination.emoji) Navigation vers \(destination.rawValue)")
+
+        // Si on navigue vers home
+        if destination == .home {
+            navigateToHome()
+            return
+        }
+
+        // Si on est déjà sur cette destination
+        if presentedDestination == destination {
+            print("ℹ️ Déjà sur \(destination.rawValue)")
+            return
+        }
+
+        isTransitioning = true
+        closeMenu()
+
+        // Si une autre vue est ouverte, la fermer d'abord
+        if presentedDestination != nil {
+            presentedDestination = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                self.openDestination(destination)
+            }
+        } else {
+            openDestination(destination)
+        }
     }
 
-    func closeComposteurGratuit() {
-        showComposteurGratuitView = false
-    }
-    
-    func navigateToToilets() {
-        print("🚽 Navigation vers toilettes")
-        guard !isTransitioning else { return }
-        isTransitioning = true
-        closeMenu()
-        if showToiletsMap {
-            isTransitioning = false
-            return
-        }
-        let hasOtherViewOpen = showBancsMap || showFontainesMap || showRandosMap || showSilosMap || showBornesMap || showCompostMap || showParcsMap || showPoubelleMap
-        if hasOtherViewOpen {
-            closeAllMaps()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self.openToiletsAfterDelay()
-            }
-        } else {
-            openToiletsAfterDelay()
-        }
-    }
-    private func openToiletsAfterDelay() {
-        showToiletsMap = true
-        currentDestination = "toilets"
+    private func openDestination(_ destination: Destination) {
+        presentedDestination = destination
+        currentDestination = destination
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.isTransitioning = false
         }
     }
-    
-    func navigateToBancs() {
-        print("🪑 Navigation vers bancs")
-        guard !isTransitioning else { return }
-        isTransitioning = true
-        closeMenu()
-        if showBancsMap {
-            isTransitioning = false
-            return
-        }
-        let hasOtherViewOpen = showToiletsMap || showFontainesMap || showRandosMap || showSilosMap || showBornesMap || showCompostMap || showParcsMap || showPoubelleMap
-        if hasOtherViewOpen {
-            closeAllMaps()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self.openBancsAfterDelay()
-            }
-        } else {
-            openBancsAfterDelay()
-        }
-    }
-    private func openBancsAfterDelay() {
-        showBancsMap = true
-        currentDestination = "bancs"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.isTransitioning = false
-        }
-    }
-    
-    // ✅ NAVIGATION VERS FONTAINES - INTÉGRÉE
-    func navigateToFontaines() {
-        print("⛲ Navigation vers fontaines")
-        guard !isTransitioning else { return }
-        isTransitioning = true
-        closeMenu()
-        if showFontainesMap {
-            isTransitioning = false
-            return
-        }
-        let hasOtherViewOpen = showToiletsMap || showBancsMap || showRandosMap || showSilosMap || showBornesMap || showCompostMap || showParcsMap || showPoubelleMap
-        if hasOtherViewOpen {
-            closeAllMaps()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self.openFontainesAfterDelay()
-            }
-        } else {
-            openFontainesAfterDelay()
-        }
-    }
-    private func openFontainesAfterDelay() {
-        showFontainesMap = true
-        currentDestination = "fontaines"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.isTransitioning = false
-        }
-    }
-    
-    func navigateToRandos() {
-        print("🥾 Navigation vers randos")
-        guard !isTransitioning else { return }
-        isTransitioning = true
-        closeMenu()
-        if showRandosMap {
-            isTransitioning = false
-            return
-        }
-        let hasOtherViewOpen = showToiletsMap || showBancsMap || showFontainesMap || showSilosMap || showBornesMap || showCompostMap || showParcsMap || showPoubelleMap
-        if hasOtherViewOpen {
-            closeAllMaps()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self.openRandosAfterDelay()
-            }
-        } else {
-            openRandosAfterDelay()
-        }
-    }
-    private func openRandosAfterDelay() {
-        showRandosMap = true
-        currentDestination = "randos"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.isTransitioning = false
-        }
-    }
-    
-    func navigateToSilos() {
-        print("🗂️ Navigation vers silos")
-        guard !isTransitioning else { return }
-        isTransitioning = true
-        closeMenu()
-        if showSilosMap {
-            isTransitioning = false
-            return
-        }
-        let hasOtherViewOpen = showToiletsMap || showBancsMap || showFontainesMap || showRandosMap || showBornesMap || showCompostMap || showParcsMap || showPoubelleMap
-        if hasOtherViewOpen {
-            closeAllMaps()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self.openSilosAfterDelay()
-            }
-        } else {
-            openSilosAfterDelay()
-        }
-    }
-    private func openSilosAfterDelay() {
-        showSilosMap = true
-        currentDestination = "silos"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.isTransitioning = false
-        }
-    }
-    
-    func navigateToBornes() {
-        print("🔌 Navigation vers bornes électriques")
-        guard !isTransitioning else { return }
-        isTransitioning = true
-        closeMenu()
-        if showBornesMap {
-            isTransitioning = false
-            return
-        }
-        let hasOtherViewOpen = showToiletsMap || showBancsMap || showFontainesMap || showRandosMap || showSilosMap || showCompostMap || showParcsMap || showPoubelleMap
-        if hasOtherViewOpen {
-            closeAllMaps()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self.openBornesAfterDelay()
-            }
-        } else {
-            openBornesAfterDelay()
-        }
-    }
-    private func openBornesAfterDelay() {
-        showBornesMap = true
-        currentDestination = "bornes"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.isTransitioning = false
-        }
-    }
-    
-    func navigateToCompost() {
-        print("🗑️ Navigation vers compost")
-        guard !isTransitioning else { return }
-        isTransitioning = true
-        closeMenu()
-        if showCompostMap {
-            isTransitioning = false
-            return
-        }
-        let hasOtherViewOpen = showToiletsMap || showBancsMap || showFontainesMap || showRandosMap || showSilosMap || showBornesMap || showParcsMap || showPoubelleMap
-        if hasOtherViewOpen {
-            closeAllMaps()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self.openCompostAfterDelay()
-            }
-        } else {
-            openCompostAfterDelay()
-        }
-    }
-    private func openCompostAfterDelay() {
-        showCompostMap = true
-        currentDestination = "compost"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.isTransitioning = false
-        }
-    }
-    
-    func navigateToParcs() {
-        print("🌳 Navigation vers parcs")
-        guard !isTransitioning else { return }
-        isTransitioning = true
-        closeMenu()
-        if showParcsMap {
-            isTransitioning = false
-            return
-        }
-        let hasOtherViewOpen = showToiletsMap || showBancsMap || showFontainesMap || showRandosMap || showSilosMap || showBornesMap || showCompostMap || showPoubelleMap
-        if hasOtherViewOpen {
-            closeAllMaps()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self.openParcsAfterDelay()
-            }
-        } else {
-            openParcsAfterDelay()
-        }
-    }
-    private func openParcsAfterDelay() {
-        showParcsMap = true
-        currentDestination = "parcs"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.isTransitioning = false
-        }
-    }
-    
-    func navigateToPoubelle() {
-        print("🗑️ Navigation vers poubelles")
-        guard !isTransitioning else { return }
-        isTransitioning = true
-        closeMenu()
-        if showPoubelleMap {
-            isTransitioning = false
-            return
-        }
-        let hasOtherViewOpen = showToiletsMap || showBancsMap || showFontainesMap || showRandosMap || showSilosMap || showBornesMap || showCompostMap || showParcsMap
-        if hasOtherViewOpen {
-            closeAllMaps()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                self.openPoubelleAfterDelay()
-            }
-        } else {
-            openPoubelleAfterDelay()
-        }
-    }
-    private func openPoubelleAfterDelay() {
-        showPoubelleMap = true
-        currentDestination = "poubelle"
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.isTransitioning = false
-        }
-    }
-    
-    // ✅ NAVIGATION VERS L'ACCUEIL
+
+    /// Retourner à l'accueil
     func navigateToHome() {
-        print("🏠 Navigation vers accueil")
         guard !isTransitioning else { return }
+
+        print("🏠 Navigation vers accueil")
         isTransitioning = true
         closeMenu()
-        closeAllMaps()
-        currentDestination = "home"
+        presentedDestination = nil
+        currentDestination = .home
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             self.isTransitioning = false
         }
     }
-    
-    // MARK: - FERMETURE DES VUES SPÉCIFIQUES
-    func closeToilets() {
+
+    /// Fermer la vue actuelle
+    func closeCurrentView() {
         guard !isTransitioning else { return }
-        showToiletsMap = false
-        currentDestination = "home"
+        presentedDestination = nil
+        currentDestination = .home
     }
-    func closeBancs() {
-        guard !isTransitioning else { return }
-        showBancsMap = false
-        currentDestination = "home"
-    }
-    // ✅ FERMETURE DES FONTAINES - INTÉGRÉE
-    func closeFontaines() {
-        guard !isTransitioning else { return }
-        showFontainesMap = false
-        currentDestination = "home"
-    }
-    func closeRandos() {
-        guard !isTransitioning else { return }
-        showRandosMap = false
-        currentDestination = "home"
-    }
-    func closeSilos() {
-        guard !isTransitioning else { return }
-        showSilosMap = false
-        currentDestination = "home"
-    }
-    func closeBornes() {
-        guard !isTransitioning else { return }
-        showBornesMap = false
-        currentDestination = "home"
-    }
-    func closeCompost() {
-        guard !isTransitioning else { return }
-        showCompostMap = false
-        currentDestination = "home"
-    }
-    func closeParcs() {
-        guard !isTransitioning else { return }
-        showParcsMap = false
-        currentDestination = "home"
-    }
-    func closePoubelle() {
-        guard !isTransitioning else { return }
-        showPoubelleMap = false
-        currentDestination = "home"
-    }
-    
-    // MARK: - GESTION DU MENU
+
+    // MARK: - Gestion du menu
+
     func toggleMenu() {
         withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
             isMenuExpanded.toggle()
         }
     }
+
     func closeMenu() {
         withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
             isMenuExpanded = false
         }
     }
-    
-    // MARK: - COULEURS THÉMATIQUES - AVEC FONTAINES
-    var currentThemeColor: Color? {
-        switch currentDestination {
-        case "toilets":
-            return Color(red: 0.7, green: 0.7, blue: 0.7)
-        case "bancs":
-            return Color(red: 0.7, green: 0.5, blue: 0.4)
-        case "fontaines":
-            return Color(red: 0xA5/255.0, green: 0xB2/255.0, blue: 0xA2/255.0).opacity(0.6)
-        case "randos":
-            return Color(red: 0.2, green: 0.6, blue: 0.2)
-        case "silos":
-            return Color(red: 0.5, green: 0.7, blue: 0.7)
-        case "bornes":
-            return Color(red: 0.5, green: 0.6, blue: 0.7)
-        case "compost":
-            return Color(red: 0.5, green: 0.35, blue: 0.25)
-        case "parcs":
-            return Color(red: 0.3, green: 0.7, blue: 0.3)
-        case "poubelle":
-            return Color(red: 0.6, green: 0.6, blue: 0.6)
-        default:
-            return nil
-        }
+
+    // MARK: - Méthodes de compatibilité (pour transition progressive)
+    // Ces méthodes appellent simplement navigate(to:) pour garder la compatibilité
+
+    func navigateToToilets() { navigate(to: .toilets) }
+    func navigateToBancs() { navigate(to: .bancs) }
+    func navigateToFontaines() { navigate(to: .fontaines) }
+    func navigateToRandos() { navigate(to: .randos) }
+    func navigateToSilos() { navigate(to: .silos) }
+    func navigateToBornes() { navigate(to: .bornes) }
+    func navigateToCompost() { navigate(to: .compost) }
+    func navigateToParcs() { navigate(to: .parcs) }
+    func navigateToPoubelle() { navigate(to: .poubelle) }
+    func navigateToComposteurGratuit() { navigate(to: .composteurGratuit) }
+    func navigateToCompostGuide() { navigate(to: .compostGuide) }
+    func navigateToLyonFacts() { navigate(to: .lyonFacts) }
+
+    func closeToilets() { closeCurrentView() }
+    func closeBancs() { closeCurrentView() }
+    func closeFontaines() { closeCurrentView() }
+    func closeRandos() { closeCurrentView() }
+    func closeSilos() { closeCurrentView() }
+    func closeBornes() { closeCurrentView() }
+    func closeCompost() { closeCurrentView() }
+    func closeParcs() { closeCurrentView() }
+    func closePoubelle() { closeCurrentView() }
+    func closeComposteurGratuit() { closeCurrentView() }
+    func closeCompostGuide() { closeCurrentView() }
+    func closeLyonFacts() { closeCurrentView() }
+
+    // MARK: - Computed properties de compatibilité (bindings)
+    // Ces propriétés permettent de garder la compatibilité avec le code existant
+
+    var showToiletsMap: Bool {
+        get { presentedDestination == .toilets }
+        set { if !newValue { closeCurrentView() } }
     }
-    
-    // ✅ MÉTHODE UTILITAIRE POUR DEBUGGING
+
+    var showBancsMap: Bool {
+        get { presentedDestination == .bancs }
+        set { if !newValue { closeCurrentView() } }
+    }
+
+    var showFontainesMap: Bool {
+        get { presentedDestination == .fontaines }
+        set { if !newValue { closeCurrentView() } }
+    }
+
+    var showRandosMap: Bool {
+        get { presentedDestination == .randos }
+        set { if !newValue { closeCurrentView() } }
+    }
+
+    var showSilosMap: Bool {
+        get { presentedDestination == .silos }
+        set { if !newValue { closeCurrentView() } }
+    }
+
+    var showBornesMap: Bool {
+        get { presentedDestination == .bornes }
+        set { if !newValue { closeCurrentView() } }
+    }
+
+    var showCompostMap: Bool {
+        get { presentedDestination == .compost }
+        set { if !newValue { closeCurrentView() } }
+    }
+
+    var showParcsMap: Bool {
+        get { presentedDestination == .parcs }
+        set { if !newValue { closeCurrentView() } }
+    }
+
+    var showPoubelleMap: Bool {
+        get { presentedDestination == .poubelle }
+        set { if !newValue { closeCurrentView() } }
+    }
+
+    var showComposteurGratuitView: Bool {
+        get { presentedDestination == .composteurGratuit }
+        set { if !newValue { closeCurrentView() } }
+    }
+
+    var showCompostGuideView: Bool {
+        get { presentedDestination == .compostGuide }
+        set { if !newValue { closeCurrentView() } }
+    }
+
+    var showLyonFactsView: Bool {
+        get { presentedDestination == .lyonFacts }
+        set { if !newValue { closeCurrentView() } }
+    }
+
+    // MARK: - Debug
     func getCurrentState() -> String {
         return """
         Current State:
-        - Destination: \(currentDestination)
-        - Toilets: \(showToiletsMap)
-        - Bancs: \(showBancsMap)
-        - Fontaines: \(showFontainesMap)
-        - Randos: \(showRandosMap)
-        - Silos: \(showSilosMap)
-        - Bornes: \(showBornesMap)
-        - Compost: \(showCompostMap)
-        - Parcs: \(showParcsMap)
-        - Poubelle: \(showPoubelleMap)
+        - Destination: \(currentDestination.rawValue)
+        - Presented: \(presentedDestination?.rawValue ?? "nil")
         - Transitioning: \(isTransitioning)
         - Menu Expanded: \(isMenuExpanded)
         """

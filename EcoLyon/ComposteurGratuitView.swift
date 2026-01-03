@@ -351,7 +351,7 @@ struct ComposteurGratuitView: View {
                 .font(.system(size: 16, weight: .bold))
                 .foregroundColor(.primary)
             
-            Text("Préparez-vous grâce à toutes les informations disponibles sur grandlyon.com/compostage")
+            Text("Préparez-vous grâce à toutes les informations disponibles sur [grandlyon.com/compostage](https://grandlyon.com/compostage)")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)

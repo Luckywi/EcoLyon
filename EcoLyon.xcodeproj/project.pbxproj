@@ -6,7 +6,20 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		1070A83E2EE5E8460045363A /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1070A83D2EE5E8450045363A /* WidgetKit.framework */; };
+		1070A8402EE5E8460045363A /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1070A83F2EE5E8460045363A /* SwiftUI.framework */; };
+		1070A84D2EE5E8480045363A /* EcoLyonWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1070A83B2EE5E8450045363A /* EcoLyonWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		1070A84B2EE5E8480045363A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 10C944762DF7248F009D26D7 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1070A83A2EE5E8450045363A;
+			remoteInfo = EcoLyonWidgetExtension;
+		};
 		10C944942DF72491009D26D7 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 10C944762DF7248F009D26D7 /* Project object */;
@@ -23,13 +36,39 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		1070A84E2EE5E8480045363A /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				1070A84D2EE5E8480045363A /* EcoLyonWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		1070A83B2EE5E8450045363A /* EcoLyonWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = EcoLyonWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		1070A83D2EE5E8450045363A /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		1070A83F2EE5E8460045363A /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		1070A8C62EE5FADF0045363A /* EcoLyonWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = EcoLyonWidgetExtension.entitlements; sourceTree = "<group>"; };
 		10C9447E2DF7248F009D26D7 /* EcoLyon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EcoLyon.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		10C944932DF72491009D26D7 /* EcoLyonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EcoLyonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		10C9449D2DF72491009D26D7 /* EcoLyonUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EcoLyonUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		10C944C12DF72F48009D26D7 /* EcoLyon.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = EcoLyon.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		1070A8522EE5E8480045363A /* Exceptions for "EcoLyonWidget" folder in "EcoLyonWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1070A83A2EE5E8450045363A /* EcoLyonWidgetExtension */;
+		};
 		10C944C02DF72F47009D26D7 /* Exceptions for "EcoLyon" folder in "EcoLyon" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -37,9 +76,25 @@
 			);
 			target = 10C9447D2DF7248F009D26D7 /* EcoLyon */;
 		};
+		10D9A8E92F058C73007464DB /* Exceptions for "EcoLyonWidget" folder in "EcoLyon" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+			);
+			target = 10C9447D2DF7248F009D26D7 /* EcoLyon */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		1070A8412EE5E8460045363A /* EcoLyonWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				10D9A8E92F058C73007464DB /* Exceptions for "EcoLyonWidget" folder in "EcoLyon" target */,
+				1070A8522EE5E8480045363A /* Exceptions for "EcoLyonWidget" folder in "EcoLyonWidgetExtension" target */,
+			);
+			path = EcoLyonWidget;
+			sourceTree = "<group>";
+		};
 		10C944802DF7248F009D26D7 /* EcoLyon */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -61,6 +116,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		1070A8382EE5E8450045363A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1070A8402EE5E8460045363A /* SwiftUI.framework in Frameworks */,
+				1070A83E2EE5E8460045363A /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		10C9447B2DF7248F009D26D7 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -85,12 +149,25 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		1070A83C2EE5E8450045363A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				1070A83D2EE5E8450045363A /* WidgetKit.framework */,
+				1070A83F2EE5E8460045363A /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		10C944752DF7248F009D26D7 = {
 			isa = PBXGroup;
 			children = (
+				10C944C12DF72F48009D26D7 /* EcoLyon.entitlements */,
+				1070A8C62EE5FADF0045363A /* EcoLyonWidgetExtension.entitlements */,
 				10C944802DF7248F009D26D7 /* EcoLyon */,
 				10C944962DF72491009D26D7 /* EcoLyonTests */,
 				10C944A02DF72491009D26D7 /* EcoLyonUITests */,
+				1070A8412EE5E8460045363A /* EcoLyonWidget */,
+				1070A83C2EE5E8450045363A /* Frameworks */,
 				10C9447F2DF7248F009D26D7 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -101,6 +178,7 @@
 				10C9447E2DF7248F009D26D7 /* EcoLyon.app */,
 				10C944932DF72491009D26D7 /* EcoLyonTests.xctest */,
 				10C9449D2DF72491009D26D7 /* EcoLyonUITests.xctest */,
+				1070A83B2EE5E8450045363A /* EcoLyonWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -108,6 +186,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		1070A83A2EE5E8450045363A /* EcoLyonWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1070A8512EE5E8480045363A /* Build configuration list for PBXNativeTarget "EcoLyonWidgetExtension" */;
+			buildPhases = (
+				1070A8372EE5E8450045363A /* Sources */,
+				1070A8382EE5E8450045363A /* Frameworks */,
+				1070A8392EE5E8450045363A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				1070A8412EE5E8460045363A /* EcoLyonWidget */,
+			);
+			name = EcoLyonWidgetExtension;
+			packageProductDependencies = (
+			);
+			productName = EcoLyonWidgetExtension;
+			productReference = 1070A83B2EE5E8450045363A /* EcoLyonWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		10C9447D2DF7248F009D26D7 /* EcoLyon */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 10C944A72DF72491009D26D7 /* Build configuration list for PBXNativeTarget "EcoLyon" */;
@@ -115,10 +215,12 @@
 				10C9447A2DF7248F009D26D7 /* Sources */,
 				10C9447B2DF7248F009D26D7 /* Frameworks */,
 				10C9447C2DF7248F009D26D7 /* Resources */,
+				1070A84E2EE5E8480045363A /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				1070A84C2EE5E8480045363A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				10C944802DF7248F009D26D7 /* EcoLyon */,
@@ -186,6 +288,9 @@
 				LastSwiftUpdateCheck = 1620;
 				LastUpgradeCheck = 1620;
 				TargetAttributes = {
+					1070A83A2EE5E8450045363A = {
+						CreatedOnToolsVersion = 16.2;
+					};
 					10C9447D2DF7248F009D26D7 = {
 						CreatedOnToolsVersion = 16.2;
 					};
@@ -216,11 +321,19 @@
 				10C9447D2DF7248F009D26D7 /* EcoLyon */,
 				10C944922DF72491009D26D7 /* EcoLyonTests */,
 				10C9449C2DF72491009D26D7 /* EcoLyonUITests */,
+				1070A83A2EE5E8450045363A /* EcoLyonWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		1070A8392EE5E8450045363A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		10C9447C2DF7248F009D26D7 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -245,6 +358,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		1070A8372EE5E8450045363A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		10C9447A2DF7248F009D26D7 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -269,6 +389,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		1070A84C2EE5E8480045363A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1070A83A2EE5E8450045363A /* EcoLyonWidgetExtension */;
+			targetProxy = 1070A84B2EE5E8480045363A /* PBXContainerItemProxy */;
+		};
 		10C944952DF72491009D26D7 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 10C9447D2DF7248F009D26D7 /* EcoLyon */;
@@ -282,6 +407,68 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		1070A84F2EE5E8480045363A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = EcoLyonWidgetExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 26;
+				DEVELOPMENT_TEAM = 68R3JB877A;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EcoLyonWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = EcoLyonWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.EcoLyon.app.EcoLyon.EcoLyonWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		1070A8502EE5E8480045363A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = EcoLyonWidgetExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 26;
+				DEVELOPMENT_TEAM = 68R3JB877A;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = EcoLyonWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = EcoLyonWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.3;
+				PRODUCT_BUNDLE_IDENTIFIER = com.EcoLyon.app.EcoLyon.EcoLyonWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		10C944A52DF72491009D26D7 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -334,7 +521,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -391,7 +578,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -406,6 +593,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ATMO_API_TOKEN = 0c7d0bee25f494150fa591275260e81f;
+				CODE_SIGN_ENTITLEMENTS = EcoLyon.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_ASSET_PATHS = "\"EcoLyon/Preview Content\"";
@@ -421,7 +611,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDarkContent;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -429,6 +619,7 @@
 				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.EcoLyon.app.EcoLyon;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -444,6 +635,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ATMO_API_TOKEN = 0c7d0bee25f494150fa591275260e81f;
+				CODE_SIGN_ENTITLEMENTS = EcoLyon.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 26;
 				DEVELOPMENT_ASSET_PATHS = "\"EcoLyon/Preview Content\"";
@@ -459,7 +653,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleDarkContent;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -467,6 +661,7 @@
 				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.EcoLyon.app.EcoLyon;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -485,7 +680,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 68R3JB877A;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.EcoLyon.app.EcoLyonTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -504,7 +699,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 68R3JB877A;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.EcoLyon.app.EcoLyonTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -552,6 +747,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		1070A8512EE5E8480045363A /* Build configuration list for PBXNativeTarget "EcoLyonWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1070A84F2EE5E8480045363A /* Debug */,
+				1070A8502EE5E8480045363A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		10C944792DF7248F009D26D7 /* Build configuration list for PBXProject "EcoLyon" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

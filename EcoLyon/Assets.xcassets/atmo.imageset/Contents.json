@@ -1,0 +1,23 @@
+{
+  "images" : [
+    {
+      "filename" : "20250801_1208_Logo Transparent Atmo_remix_01k1jhjkhde7gvv48tqgs4wggs.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
+      "filename" : "20250801_1208_Logo Transparent Atmo_remix_01k1jhjkhde7gvv48tqgs4wggs 1.png",
+      "idiom" : "universal",
+      "scale" : "2x"
+    },
+    {
+      "filename" : "20250801_1208_Logo Transparent Atmo_remix_01k1jhjkhde7gvv48tqgs4wggs 2.png",
+      "idiom" : "universal",
+      "scale" : "3x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

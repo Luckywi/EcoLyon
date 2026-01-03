@@ -41,7 +41,6 @@ class GlobalLocationService: NSObject, ObservableObject {
         
         // ✅ ÉTAPE 1 : Utiliser IMMÉDIATEMENT la position connue si disponible
         if let lastKnownLocation = locationManager.location {
-            print("📍 Position connue trouvée : \(lastKnownLocation.coordinate)")
             processLocation(lastKnownLocation.coordinate, isKnownLocation: true)
         }
         
@@ -116,19 +115,19 @@ class GlobalLocationService: NSObject, ObservableObject {
     // ✅ NOUVELLE MÉTHODE : Traitement centralisé des positions
     private func processLocation(_ coordinate: CLLocationCoordinate2D, isKnownLocation: Bool = false) {
         userLocation = coordinate
-        
+
         // Calcul immédiat de l'arrondissement
         let nearestDistrict = calculateNearestDistrict(from: coordinate)
         detectedDistrict = nearestDistrict
         isLocationReady = true
         locationError = nil
-        
+
+        // ✅ WIDGET : Partager la position via App Group
+        shareLocationWithWidget(coordinate)
+
         // Annuler le fallback si en cours
         fallbackTimer?.invalidate()
         fallbackTimer = nil
-        
-        let locationSource = isKnownLocation ? "(position connue)" : "(nouvelle position)"
-        print("✅ Position traitée \(locationSource): \(nearestDistrict.name) (\(coordinate.latitude), \(coordinate.longitude))")
         
         // ✅ Arrêter les mises à jour après 3 positions précises nouvelles
         if !isKnownLocation && isUpdatingLocation {
@@ -178,57 +177,79 @@ class GlobalLocationService: NSObject, ObservableObject {
         if isUpdatingLocation {
             stopLocationUpdates()
         }
-        
+
         // Petite pause puis redémarrage
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.refreshLocation()
         }
     }
+
+    // ✅ WIDGET : Partager la position avec le widget via App Group
+    private func shareLocationWithWidget(_ coordinate: CLLocationCoordinate2D) {
+        guard let defaults = UserDefaults(suiteName: "group.com.ecolyon.shared") else {
+            return
+        }
+
+        defaults.set(coordinate.latitude, forKey: "lastUserLatitude")
+        defaults.set(coordinate.longitude, forKey: "lastUserLongitude")
+        defaults.set(Date().timeIntervalSince1970, forKey: "lastLocationTimestamp")
+
+        print("📍 Position partagée avec widget: \(coordinate.latitude), \(coordinate.longitude)")
+    }
 }
 
 // MARK: - CLLocationManagerDelegate OPTIMISÉ
 extension GlobalLocationService: CLLocationManagerDelegate {
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
-        
+
         // ✅ Utiliser la méthode centralisée de traitement
-        processLocation(location.coordinate, isKnownLocation: false)
-    }
-    
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        print("❌ Erreur localisation: \(error)")
-        
-        // ✅ Ne pas fallback immédiatement, garder la position connue si elle existe
-        if userLocation == nil {
-            setFallbackDistrict()
+        Task { @MainActor in
+            processLocation(location.coordinate, isKnownLocation: false)
         }
-        
-        // Arrêter les mises à jour en cas d'erreur
-        stopLocationUpdates()
     }
-    
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        authorizationStatus = manager.authorizationStatus
-        
-        switch authorizationStatus {
-        case .authorizedWhenInUse, .authorizedAlways:
-            // ✅ Vérifier position connue puis démarrer les mises à jour
-            if let lastKnownLocation = locationManager.location, userLocation == nil {
-                print("📍 Autorisation accordée - position connue disponible")
-                processLocation(lastKnownLocation.coordinate, isKnownLocation: true)
-            }
-            startContinuousLocationUpdates()
-        case .denied, .restricted:
-            stopLocationUpdates()
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        print("❌ Erreur localisation: \(error)")
+
+        Task { @MainActor in
+            // ✅ Ne pas fallback immédiatement, garder la position connue si elle existe
             if userLocation == nil {
                 setFallbackDistrict()
             }
-        case .notDetermined:
-            break
-        @unknown default:
+
+            // Arrêter les mises à jour en cas d'erreur
             stopLocationUpdates()
-            if userLocation == nil {
-                setFallbackDistrict()
+        }
+    }
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
+        let lastLocation = manager.location
+
+        Task { @MainActor in
+            authorizationStatus = status
+
+            switch status {
+            case .authorizedWhenInUse, .authorizedAlways:
+                // ✅ Vérifier position connue puis démarrer les mises à jour
+                if let lastKnownLocation = lastLocation, userLocation == nil {
+                    print("📍 Autorisation accordée - position connue disponible")
+                    processLocation(lastKnownLocation.coordinate, isKnownLocation: true)
+                }
+                startContinuousLocationUpdates()
+            case .denied, .restricted:
+                stopLocationUpdates()
+                if userLocation == nil {
+                    setFallbackDistrict()
+                }
+            case .notDetermined:
+                break
+            @unknown default:
+                stopLocationUpdates()
+                if userLocation == nil {
+                    setFallbackDistrict()
+                }
             }
         }
     }
@@ -237,7 +258,7 @@ extension GlobalLocationService: CLLocationManagerDelegate {
 // Vue racine qui gère le loading screen
 struct RootView: View {
     @State private var showLoadingScreen = true
-    
+
     var body: some View {
         ZStack {
             if showLoadingScreen {
@@ -246,7 +267,9 @@ struct RootView: View {
                 }
                 .transition(.opacity)
             } else {
-                ContentView()
+                // ✅ TEST: Nouvelle version de la page d'accueil
+                ContentViewTest()
+                // ContentView() // Version originale
                     .transition(.opacity)
             }
         }
@@ -257,15 +280,19 @@ struct RootView: View {
 @main
 struct EcoLyonApp: App {
     let persistenceController = PersistenceController.shared
-    
+    @Environment(\.scenePhase) private var scenePhase
+
     init() {
         // ✅ DÉMARRER LA LOCALISATION DÈS LE LANCEMENT AVEC STRATÉGIE OPTIMISÉE
         _ = GlobalLocationService.shared
         print("🚀 App lancée - Localisation optimisée démarrée immédiatement")
-        
+
         // ✅ AJOUT : Démarrer le préchargement des Lyon Facts
-               _ = LyonFactsPreloader.shared
-               print("🖼️ Préchargement Lyon Facts démarré")
+        _ = LyonFactsPreloader.shared
+        print("🖼️ Préchargement Lyon Facts démarré")
+
+        // Vérifier navigation widget au lancement
+        checkPendingWidgetNavigation()
     }
 
     var body: some Scene {
@@ -273,6 +300,86 @@ struct EcoLyonApp: App {
             RootView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .preferredColorScheme(.light)
+                .onOpenURL { url in
+                    handleWidgetDeepLink(url)
+                }
+        }
+    }
+
+    // MARK: - Deep Link Handler
+    private func handleWidgetDeepLink(_ url: URL) {
+        print("🔗 Deep link reçu: \(url)")
+
+        guard url.scheme == "ecolyon" else { return }
+
+        let path = url.host ?? ""
+        print("📍 Navigation widget vers: \(path)")
+
+        // Mapper vers la destination
+        let destination: Destination? = {
+            switch path {
+            case "toilettes": return .toilets
+            case "bancs": return .bancs
+            case "fontaines": return .fontaines
+            case "silos": return .silos
+            case "compost": return .compost
+            case "poubelles": return .poubelle
+            case "parcs": return .parcs
+            case "bornes": return .bornes
+            default: return nil
+            }
+        }()
+
+        if let destination = destination {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                NavigationManager.shared.navigate(to: destination)
+            }
+        }
+    }
+
+    // MARK: - Widget Navigation Handler
+    private func checkPendingWidgetNavigation() {
+        guard let defaults = UserDefaults(suiteName: "group.com.ecolyon.shared"),
+              let pending = defaults.string(forKey: "pendingNavigation"),
+              let timestamp = defaults.object(forKey: "pendingNavigationTimestamp") as? Double else {
+            return
+        }
+
+        // Vérifier que la demande est récente (moins de 5 secondes)
+        let requestTime = Date(timeIntervalSince1970: timestamp)
+        guard Date().timeIntervalSince(requestTime) < 5 else {
+            // Trop vieux, nettoyer
+            defaults.removeObject(forKey: "pendingNavigation")
+            defaults.removeObject(forKey: "pendingNavigationTimestamp")
+            return
+        }
+
+        print("🔗 Navigation widget détectée: \(pending)")
+
+        // Nettoyer immédiatement pour éviter les doublons
+        defaults.removeObject(forKey: "pendingNavigation")
+        defaults.removeObject(forKey: "pendingNavigationTimestamp")
+
+        // Mapper vers la destination
+        let destination: Destination? = {
+            switch pending {
+            case "toilettes": return .toilets
+            case "bancs": return .bancs
+            case "fontaines": return .fontaines
+            case "silos": return .silos
+            case "compost": return .compost
+            case "poubelles": return .poubelle
+            case "parcs": return .parcs
+            case "bornes": return .bornes
+            default: return nil
+            }
+        }()
+
+        if let destination = destination {
+            // Délai pour laisser l'app se charger
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                NavigationManager.shared.navigate(to: destination)
+            }
         }
     }
 }

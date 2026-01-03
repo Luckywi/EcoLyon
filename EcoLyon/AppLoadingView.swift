@@ -57,179 +57,248 @@ class AppInitializationService: ObservableObject {
     }
 }
 
+struct PartnerCard: View {
+    let imageName: String
+    let text: String
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Logo sans background ni container
+            Image(imageName)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: logoWidth, height: logoHeight)
+            
+            // Texte descriptif - plus discret et uniforme
+            Text(text)
+                .font(.system(size: 10, weight: .regular))
+                .foregroundColor(.black.opacity(0.5))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 240, height: 40, alignment: .center)
+        }
+        .frame(height: 140)
+    }
+    
+    // Gestion individuelle des tailles de logos
+    private var logoWidth: CGFloat {
+        switch imageName {
+        case "Lyon2030": return 90
+        case "atmo": return 130
+        case "data": return 200
+        default: return 90
+        }
+    }
+    
+    private var logoHeight: CGFloat {
+        switch imageName {
+        case "Lyon2030": return 60
+        case "atmo": return 60
+        case "data": return 60
+        default: return 60
+        }
+    }
+}
+
 struct AppLoadingView: View {
     @StateObject private var initService = AppInitializationService()
-    @StateObject private var locationService = GlobalLocationService.shared
+    @ObservedObject private var locationService = GlobalLocationService.shared
+    @State private var currentCardIndex = 0
+    @State private var cardTimer: Timer? // ✅ Ajout pour gérer le timer
     let onComplete: () -> Void
+    
+    private let partnerCards = [
+        ("data", "Données de géolocalisation\nfournies par DataGrandLyon"),
+        ("Lyon2030", "Projet soutenu par la Ville de Lyon\ndans le cadre de la Bourse Jeunes Lyon 2030"),
+        ("atmo", "Données sur la qualité de l’air\nfournies par Atmo Auvergne-Rhône-Alpes")
+    ]
     
     var body: some View {
         ZStack {
-            // Gradient de fond
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.blue.opacity(0.8),
-                    Color.green.opacity(0.6),
-                    Color.blue.opacity(0.4)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            // Nouveau background couleur crème
+            Color(red: 248/255, green: 247/255, blue: 244/255)
+                .ignoresSafeArea()
             
-            VStack(spacing: 40) {
+            VStack(spacing: 0) {
                 Spacer()
+                    .frame(height: 60)
                 
-                // Logo et titre
+                // Section logo principal EcoLogo
                 VStack(spacing: 20) {
-                    // Logo de l'app avec animation subtile
-                    ZStack {
-                        Circle()
-                            .fill(.white.opacity(0.2))
-                            .frame(width: 120, height: 120)
-                        
-                        Image(systemName: "leaf.fill")
-                            .font(.system(size: 60))
-                            .foregroundColor(.white)
-                            .scaleEffect(initService.initializationProgress > 0.5 ? 1.1 : 1.0)
-                            .animation(.easeInOut(duration: 0.3), value: initService.initializationProgress)
-                    }
+                    // Logo EcoLogo principal (image assets)
+                    Image("EcoLogo")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 260, height: 290)
+                        .scaleEffect(initService.initializationProgress > 0.5 ? 1.05 : 1.0)
+                        .animation(.easeInOut(duration: 0.4), value: initService.initializationProgress)
                     
-                    Text("EcoLyon")
-                        .font(.system(size: 36, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                        .shadow(radius: 2)
-                    
-                    Text("Votre assistant écologique lyonnais")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.9))
-                        .multilineTextAlignment(.center)
+                    // ✅ CORRIGÉ : Cartes partenaires affichées immédiatement
+                    PartnerCard(
+                        imageName: partnerCards[currentCardIndex].0,
+                        text: partnerCards[currentCardIndex].1
+                    )
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.8).combined(with: .opacity),
+                        removal: .scale(scale: 1.1).combined(with: .opacity)
+                    ))
+                    .id(currentCardIndex) // Force la réanimation
                 }
                 
                 Spacer()
+                    .frame(height: 40)
                 
-                // Section de chargement avec info localisation optimisée
-                VStack(spacing: 24) {
-                    // Barre de progression
-                    VStack(spacing: 12) {
-                        Text(initService.currentStatus)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                        
-                        // ✅ Affichage de l'arrondissement détecté avec animation améliorée
-                        if let district = locationService.detectedDistrict {
-                            HStack(spacing: 8) {
-                                // Icône de localisation animée
-                                Image(systemName: "location.fill")
-                                    .foregroundColor(.green)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .scaleEffect(1.2)
-                                    .animation(.easeInOut(duration: 0.5).repeatCount(1, autoreverses: false), value: district.name)
-                                
-                                Text(district.name)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.9))
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(.white.opacity(0.15))
-                            )
-                            .transition(.opacity.combined(with: .scale(scale: 0.8)))
-                        } else if locationService.locationError != nil {
-                            // ✅ Affichage de l'erreur de localisation
-                            HStack(spacing: 8) {
-                                Image(systemName: "location.slash")
-                                    .foregroundColor(.orange)
-                                    .font(.system(size: 12, weight: .semibold))
-                                
-                                Text("Position indisponible")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(.orange.opacity(0.2))
-                            )
-                            .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                // Section statut et progression
+                VStack(spacing: 20) {
+                    // Statut actuel
+                    Text(initService.currentStatus)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.black)
+                    
+                    // Affichage de l'arrondissement détecté
+                    if let district = locationService.detectedDistrict {
+                        HStack(spacing: 8) {
+                            Image(systemName: "location.fill")
+                                .foregroundColor(Color(red: 0x46/255, green: 0x95/255, blue: 0x2C/255))
+                                .font(.system(size: 14, weight: .semibold))
+                            
+                            Text(district.name)
+                                .font(.system(size: 15, weight: .medium))
+                                .foregroundColor(.black.opacity(0.8))
                         }
-                        
-                        // Barre de progression avec animation fluide
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(Color(red: 0x46/255, green: 0x95/255, blue: 0x2C/255).opacity(0.1))
+                        )
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    } else if locationService.locationError != nil {
+                        HStack(spacing: 8) {
+                            Image(systemName: "location.slash")
+                                .foregroundColor(.orange)
+                                .font(.system(size: 14, weight: .semibold))
+                            
+                            Text("Position indisponible")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.black.opacity(0.7))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(Color.orange.opacity(0.1))
+                        )
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    }
+                    
+                    // Barre de progression moderne
+                    VStack(spacing: 12) {
                         ZStack(alignment: .leading) {
                             // Fond de la barre
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(.white.opacity(0.3))
-                                .frame(height: 8)
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.black.opacity(0.08))
+                                .frame(height: 12)
                             
-                            // Progression avec dégradé
-                            RoundedRectangle(cornerRadius: 10)
+                            // Progression avec dégradé vert
+                            RoundedRectangle(cornerRadius: 12)
                                 .fill(
                                     LinearGradient(
-                                        gradient: Gradient(colors: [.white, .white.opacity(0.8)]),
+                                        gradient: Gradient(colors: [
+                                            Color(red: 0x46/255, green: 0x95/255, blue: 0x2C/255).opacity(0.8),
+                                            Color(red: 0x46/255, green: 0x95/255, blue: 0x2C/255)
+                                        ]),
                                         startPoint: .leading,
                                         endPoint: .trailing
                                     )
                                 )
-                                .frame(width: max(20, initService.initializationProgress * 280), height: 8)
+                                .frame(width: max(24, initService.initializationProgress * 300), height: 12)
                                 .animation(.easeInOut(duration: 0.5), value: initService.initializationProgress)
                         }
-                        .frame(width: 280)
+                        .frame(width: 300)
+                        
+                        // Pourcentage
+                        Text("\(Int(initService.initializationProgress * 100))%")
+                            .font(.system(size: 15, weight: .regular, design: .monospaced))
+                            .foregroundColor(.black.opacity(0.5))
+                            .animation(.easeInOut(duration: 0.3), value: initService.initializationProgress)
                     }
                     
-                    // Pourcentage avec animation compatible iOS 15+
-                    Text("\(Int(initService.initializationProgress * 100))%")
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.8))
-                        .animation(.easeInOut(duration: 0.3), value: initService.initializationProgress)
-                    
-                    // ✅ Indicateur de statut de localisation discret
+                    // Indicateur de statut de localisation
                     if initService.initializationProgress > 0.3 {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             Circle()
-                                .fill(locationService.isLocationReady ? .green : .orange)
-                                .frame(width: 6, height: 6)
+                                .fill(locationService.isLocationReady ? Color(red: 0x46/255, green: 0x95/255, blue: 0x2C/255) : .orange)
+                                .frame(width: 8, height: 8)
                             
                             Text(locationService.isLocationReady ? "Localisation OK" : "Recherche position...")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.white.opacity(0.6))
+                                .font(.system(size: 13, weight: .regular))
+                                .foregroundColor(.black.opacity(0.5))
                         }
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
                 }
                 
                 Spacer()
-                    .frame(height: 60)
+                    .frame(height: 40)
             }
             .padding(.horizontal, 40)
         }
         .onAppear {
+            // ✅ CORRIGÉ : Animation des cartes partenaires démarrent immédiatement
+            startPartnerCardsAnimation()
+            
             // ✅ Démarrage optimisé de l'initialisation
             Task {
                 await initService.initializeApp()
             }
         }
-        // ✅ CORRIGÉ : onChange compatible iOS 15+
-        .onChange(of: initService.isAppReady) { isReady in
+        // ✅ Nettoyage du timer quand la vue disparaît
+        .onDisappear {
+            cardTimer?.invalidate()
+            cardTimer = nil
+        }
+        // ✅ onChange iOS 17+
+        .onChange(of: initService.isAppReady) { _, isReady in
             if isReady {
+                // ✅ Arrêter l'animation des cartes
+                cardTimer?.invalidate()
+                cardTimer = nil
+
                 // ✅ Délai réduit pour transition plus rapide
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     onComplete()
                 }
             }
         }
-        // ✅ Animation lors du changement d'arrondissement pendant le loading - Compatible iOS 15+
-        .onChange(of: locationService.detectedDistrict) { district in
+        // ✅ Animation lors du changement d'arrondissement pendant le loading
+        .onChange(of: locationService.detectedDistrict) { _, district in
             if let district = district {
                 print("🎯 Arrondissement mis à jour pendant loading: \(district.name)")
             }
         }
-        // ✅ Réaction au changement de statut de localisation - Compatible iOS 15+
-        .onChange(of: locationService.isLocationReady) { isReady in
+        // ✅ Réaction au changement de statut de localisation
+        .onChange(of: locationService.isLocationReady) { _, isReady in
             if isReady {
                 print("✅ Localisation prête pendant le loading")
             }
         }
+    }
+    
+    // ✅ NOUVELLE FONCTION : Démarrer l'animation des cartes
+    private func startPartnerCardsAnimation() {
+        cardTimer = Timer.scheduledTimer(withTimeInterval: 0.33, repeats: true) { _ in
+            withAnimation(.easeInOut(duration: 0.1)) {
+                currentCardIndex = (currentCardIndex + 1) % partnerCards.count
+            }
+        }
+    }
+}
+
+// MARK: - Preview
+#Preview {
+    AppLoadingView {
+        print("App ready!")
     }
 }

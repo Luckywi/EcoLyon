@@ -196,7 +196,7 @@ class RecommendationsService: ObservableObject {
     private let apiToken = "0c7d0bee25f494150fa591275260e81f"
     private let baseURL = "https://api.atmo-aura.fr/bons_gestes"
     
-    @StateObject private var vigilanceService = VigilanceService()
+    private let vigilanceService = VigilanceService()
     
     @Published var allRecommendations: [Recommendation] = []
     @Published var currentAlertLevel: String = "vert"
@@ -212,8 +212,8 @@ class RecommendationsService: ObservableObject {
         // 1. D'abord récupérer le niveau d'alerte officiel
         await vigilanceService.fetchCurrentAlertLevel()
         
-        var alertLevel: String
-        
+        let alertLevel: String
+
         // 2. Utiliser le niveau officiel ou fallback
         if vigilanceService.errorMessage != nil, let aqi = fallbackAQI {
             // Fallback sur conversion AQI
@@ -224,9 +224,10 @@ class RecommendationsService: ObservableObject {
             alertLevel = vigilanceService.currentAlertLevel
             print("✅ Niveau officiel Atmo: \(alertLevel)")
         }
-        
+
+        let capturedAlertLevel = alertLevel
         await MainActor.run {
-            currentAlertLevel = alertLevel
+            currentAlertLevel = capturedAlertLevel
         }
         
         // 3. Récupérer les recommandations selon le niveau
@@ -396,13 +397,15 @@ struct AirQualityRecommendationsView: View {
     }
 }
 
-// MARK: - Carte swipable (avec taille réduite et sans indicateur swipe)
+// MARK: - Carte swipable avec chevron uniquement pour les détails
 struct SwipableRecommendationCard: View {
     let recommendations: [Recommendation]
     let alertLevel: String
     @Binding var currentIndex: Int
     @Binding var dragOffset: CGSize
     @State private var showFullMessage = false
+    @State private var isDragging = false
+    @State private var autoSwipeTimer: Timer?
     
     private var currentRecommendation: Recommendation {
         recommendations[currentIndex]
@@ -418,35 +421,29 @@ struct SwipableRecommendationCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Message principal - Zone tappable pour détails
-            Button(action: {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    showFullMessage.toggle()
-                }
-            }) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(currentRecommendation.message_court)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white) // Texte blanc sur fond noir
+            // ✅ ZONE DE TEXTE - Pas de tap, seulement lecture
+            VStack(alignment: .leading, spacing: 8) {
+                Text(currentRecommendation.message_court)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(showFullMessage ? nil : 3)
+                    .frame(minHeight: 40, alignment: .top) 
+                
+                // Message détaillé (conditionnel)
+                if showFullMessage {
+                    Text(currentRecommendation.message_long)
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.8))
                         .multilineTextAlignment(.leading)
-                        .lineLimit(showFullMessage ? nil : 3)
-                    
-                    // Message détaillé (conditionnel)
-                    if showFullMessage {
-                        Text(currentRecommendation.message_long)
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.8)) // Texte blanc semi-transparent
-                            .multilineTextAlignment(.leading)
-                            .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                    }
+                        .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(PlainButtonStyle())
+            .frame(maxWidth: .infinity, alignment: .leading)
             
-            // Icône pour expand/collapse en bas à droite
+            // ✅ BARRE DU BAS - Seul le chevron est cliquable
             HStack {
-                // Badge de type à gauche
+                // Badge de type à gauche (pas cliquable)
                 HStack(spacing: 6) {
                     Circle()
                         .fill(accentColor)
@@ -459,91 +456,112 @@ struct SwipableRecommendationCard: View {
                 
                 Spacer()
                 
-                // Bouton expand/collapse
+                // ✅ SEUL BOUTON CLIQUABLE - Chevron uniquement (UI identique à l'original)
                 Button(action: {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                         showFullMessage.toggle()
                     }
                 }) {
                     Image(systemName: showFullMessage ? "chevron.up" : "chevron.down")
-                        .foregroundColor(.white.opacity(0.7)) // Icône blanche semi-transparente
+                        .foregroundColor(.white.opacity(0.7))
                         .font(.system(size: 12, weight: .medium))
                         .padding(6)
                 }
+                .buttonStyle(PlainButtonStyle())
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .frame(height: showFullMessage ? nil : 120) // Encore plus compact
+        .frame(height: showFullMessage ? nil : 120)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.black.opacity(0.7)) // Background noir semi-transparent comme dans ton app
+                .fill(Color.black.opacity(0.7))
         )
         .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
         .offset(x: dragOffset.width)
         .rotationEffect(.degrees(dragOffset.width / 20))
         .scaleEffect(1 - abs(dragOffset.width) / 1000)
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showFullMessage)
+        // ✅ GESTURE SWIPE SUR TOUTE LA ZONE
         .gesture(
-            DragGesture()
+            DragGesture(minimumDistance: 15)
                 .onChanged { value in
-                    dragOffset = value.translation
+                    isDragging = true
+                    stopAutoSwipe() // ✅ Arrêter l'auto-swipe quand l'utilisateur touche
+                    // Swipe horizontal uniquement
+                    if abs(value.translation.width) > abs(value.translation.height) {
+                        dragOffset = CGSize(width: value.translation.width, height: 0)
+                    }
                 }
                 .onEnded { value in
-                    let threshold: CGFloat = 50
+                    let threshold: CGFloat = 30
                     
-                    if value.translation.width > threshold {
-                        // Swipe vers la droite - carte précédente
-                        previousCard()
-                    } else if value.translation.width < -threshold {
-                        // Swipe vers la gauche - carte suivante
-                        nextCard()
+                    // Vérifier si c'est un swipe horizontal significatif
+                    if abs(value.translation.width) > threshold &&
+                       abs(value.translation.width) > abs(value.translation.height) {
+                        
+                        if value.translation.width > threshold {
+                            // Swipe vers la droite - carte précédente
+                            previousCard()
+                        } else if value.translation.width < -threshold {
+                            // Swipe vers la gauche - carte suivante
+                            nextCard()
+                        }
                     }
                     
+                    // Reset animation
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                         dragOffset = .zero
+                    }
+                    
+                    // Reset drag state avec un petit délai puis redémarrer l'auto-swipe
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isDragging = false
+                        startAutoSwipe() // ✅ Redémarrer l'auto-swipe après interaction
                     }
                 }
         )
         .padding(.horizontal, 20)
+        .onAppear {
+            startAutoSwipe()
+        }
+        .onDisappear {
+            stopAutoSwipe()
+        }
     }
     
     private func nextCard() {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
             currentIndex = (currentIndex + 1) % recommendations.count
-            showFullMessage = false
+            showFullMessage = false // Fermer les détails lors du swipe
         }
+    }
+    
+    // ✅ FONCTIONS AUTO-SWIPE
+    private func startAutoSwipe() {
+        stopAutoSwipe() // S'assurer qu'il n'y a pas de timer existant
+        
+        autoSwipeTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { _ in
+            // Auto-swipe seulement si pas d'interaction utilisateur et plusieurs cartes
+            if !isDragging && !showFullMessage && recommendations.count > 1 {
+                nextCard()
+            }
+        }
+    }
+    
+    private func stopAutoSwipe() {
+        autoSwipeTimer?.invalidate()
+        autoSwipeTimer = nil
     }
     
     private func previousCard() {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-            // Correction du bouclage vers l'arrière
             if currentIndex == 0 {
                 currentIndex = recommendations.count - 1
             } else {
                 currentIndex = currentIndex - 1
             }
-            showFullMessage = false
-        }
-    }
-    
-    private func getIconForRecommendation() -> String {
-        let message = currentRecommendation.message_court.lowercased()
-        
-        if message.contains("sport") || message.contains("activité") || message.contains("exercice") {
-            return "figure.run"
-        } else if message.contains("transport") || message.contains("vélo") || message.contains("marche") {
-            return "bicycle"
-        } else if message.contains("fenêtre") || message.contains("aération") {
-            return "wind"
-        } else if message.contains("jardin") || message.contains("plante") || message.contains("arbre") {
-            return "leaf"
-        } else if message.contains("chauffage") || message.contains("température") {
-            return "thermometer"
-        } else if isHealthRecommendation {
-            return "heart.fill"
-        } else {
-            return "leaf.arrow.circlepath"
+            showFullMessage = false // Fermer les détails lors du swipe
         }
     }
 }

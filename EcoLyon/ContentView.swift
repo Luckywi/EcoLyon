@@ -1,9 +1,9 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var navigationManager = NavigationManager.shared
-    @State private var currentAQI = 3 // AQI de votre composant air quality
-    
+    @ObservedObject private var navigationManager = NavigationManager.shared
+    @State private var currentAQI = 3
+
     var body: some View {
         ZStack {
             // Contenu principal
@@ -19,117 +19,72 @@ struct ContentView: View {
                                 currentAQI = aqi
                             }
                         }
-                    
+
                     // Composant Recommandations
                     AirQualityRecommendationsView(fallbackAQI: currentAQI)
                         .padding(.bottom, 30)
-                    
+
                     // Composant Services Environnementaux
                     EnvironmentCardView()
                         .padding(.bottom, 30)
-                    
+
                     // Espacement en bas pour le menu
                     Spacer(minLength: 120)
                 }
             }
             .background(Color(red: 248/255, green: 247/255, blue: 244/255))
-            
-            // ✅ MENU CORRIGÉ - AVEC FONTAINES INTÉGRÉES
+
+            // Menu avec bindings simplifiés
             FixedBottomMenuView(
                 isMenuExpanded: $navigationManager.isMenuExpanded,
-                showToiletsMap: $navigationManager.showToiletsMap,
-                showBancsMap: $navigationManager.showBancsMap,
-                showFontainesMap: $navigationManager.showFontainesMap,  // ✅ AJOUTÉ
-                showSilosMap: $navigationManager.showSilosMap,
-                showBornesMap: $navigationManager.showBornesMap,
-                showCompostMap: $navigationManager.showCompostMap,
-                showParcsMap: $navigationManager.showParcsMap,
-                showPoubelleMap: $navigationManager.showPoubelleMap,
-                showRandosMap: $navigationManager.showRandosMap,
                 onHomeSelected: {
                     navigationManager.navigateToHome()
                 }
             )
         }
         .onAppear {
-            navigationManager.currentDestination = "home"
+            navigationManager.currentDestination = .home
         }
-        // ✅ NAVIGATION CORRIGÉE - UTILISE LES ÉTATS DU NAVIGATIONMANAGER
-        .fullScreenCover(isPresented: $navigationManager.showToiletsMap) {
+        // Navigation unifiée avec un seul fullScreenCover
+        .fullScreenCover(item: $navigationManager.presentedDestination) { destination in
+            destinationView(for: destination)
+                .onDisappear {
+                    navigationManager.closeCurrentView()
+                }
+        }
+    }
+
+    // MARK: - Factory pour les vues de destination
+    @ViewBuilder
+    private func destinationView(for destination: Destination) -> some View {
+        switch destination {
+        case .home:
+            EmptyView()
+        case .toilets:
             ToiletsMapView()
-                .onDisappear {
-                    navigationManager.closeToilets()
-                }
-        }
-        .fullScreenCover(isPresented: $navigationManager.showBancsMap) {
+        case .bancs:
             BancsMapView()
-                .onDisappear {
-                    navigationManager.closeBancs()
-                }
-        }
-        // ✅ FONTAINES INTÉGRÉES - REMPLACE LE PLACEHOLDER
-        .fullScreenCover(isPresented: $navigationManager.showFontainesMap) {
+        case .fontaines:
             FontainesMapView()
-                .onDisappear {
-                    navigationManager.closeFontaines()
-                }
-        }
-        .fullScreenCover(isPresented: $navigationManager.showRandosMap) {
+        case .randos:
             RandosMapView()
-                .onDisappear {
-                    navigationManager.closeRandos()
-                }
-        }
-        .fullScreenCover(isPresented: $navigationManager.showSilosMap) {
+        case .silos:
             SilosMapView()
-                .onDisappear {
-                    navigationManager.closeSilos()
-                }
-        }
-        .fullScreenCover(isPresented: $navigationManager.showBornesMap) {
+        case .bornes:
             BornesMapView()
-                .onDisappear {
-                    navigationManager.closeBornes()
-                }
-        }
-        .fullScreenCover(isPresented: $navigationManager.showCompostMap) {
+        case .compost:
             CompostMapView()
-                .onDisappear {
-                    navigationManager.closeCompost()
-                }
-        }
-        .fullScreenCover(isPresented: $navigationManager.showParcsMap) {
+        case .parcs:
             ParcsMapView()
-                .onDisappear {
-                    navigationManager.closeParcs()
-                }
-        }
-        .fullScreenCover(isPresented: $navigationManager.showPoubelleMap) {
+        case .poubelle:
             PoubelleMapView()
-                .onDisappear {
-                    navigationManager.closePoubelle()
-                }
-        }
-        .fullScreenCover(isPresented: $navigationManager.showComposteurGratuitView) {
+        case .composteurGratuit:
             ComposteurGratuitView()
-                .onDisappear {
-                    navigationManager.closeComposteurGratuit()
-                }
-        }
-        .fullScreenCover(isPresented: $navigationManager.showCompostGuideView) {
+        case .compostGuide:
             CompostGuideView()
-                .onDisappear {
-                    navigationManager.closeCompostGuide()
-                }
-        }
-        .fullScreenCover(isPresented: $navigationManager.showLyonFactsView) {
+        case .lyonFacts:
             LyonFactsView()
-                .onDisappear {
-                    navigationManager.closeLyonFacts()
-                }
         }
-
-
     }
 }
 

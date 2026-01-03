@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct EnvironmentCardView: View {
-    @StateObject private var navigationManager = NavigationManager.shared
+    @ObservedObject private var navigationManager = NavigationManager.shared
     
     var body: some View {
         VStack(spacing: 0) {
@@ -57,7 +57,7 @@ struct EnvironmentCardView: View {
                 EnvironmentButtonView(
                     icon: "Guide",
                     title: "Guide des bornes à compost",
-                    subtitle: "Tout savoir sur le compostage collectif",
+                    subtitle: "Tout savoir sur le tri et le compostage",
                     accentColor: Color(red: 0x8C/255.0, green: 0xC1/255.0, blue: 0xCB/255.0), // CompostColor
                     isCustomIcon: true,
                     action: {
@@ -69,7 +69,7 @@ struct EnvironmentCardView: View {
                 EnvironmentButtonView(
                     icon: "Lyon",
                     title: "Lyon en transition",
-                    subtitle: "Découvrez 70 faits sur la métropole",
+                    subtitle: "70 faits sur la Métropole de Lyon",
                     accentColor: .teal,
                     isCustomIcon: true,
                     action: {

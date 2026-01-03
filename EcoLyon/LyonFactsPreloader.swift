@@ -112,9 +112,9 @@ class LyonFactsPreloader: ObservableObject {
                 .map { UIImage(data: $0.data) }
                 .replaceError(with: nil)
                 .receive(on: DispatchQueue.main)
-                .sink { [weak self] downloadedImage in
+                .sink { downloadedImage in
                     defer { group.leave() }
-                    
+
                     if let image = downloadedImage {
                         PhotoCache.shared.set(image, forKey: fact.imageUrl)
                         successCount += 1

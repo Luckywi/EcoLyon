@@ -22,6 +22,10 @@ struct SO2DetailView: View {
                     // Informations détaillées
                     detailSections
                     
+                    // Mention des sources de données
+                    dataSourceSection
+                    
+                    
                     Spacer(minLength: 20)
                 }
                 .padding(.horizontal, 20)
@@ -207,6 +211,27 @@ struct SO2DetailView: View {
         }
     }
     
+    // MARK: - Data Source Section
+    private var dataSourceSection: some View {
+        VStack(spacing: 8) {
+            Text("Les données sur la qualité de l’air sont fournies par ATMO Auvergne-Rhône-Alpes, organisme agréé pour la surveillance de la qualité de l’air.")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundColor(.black.opacity(0.6))
+                .lineSpacing(2)
+                .multilineTextAlignment(.center)
+            
+            Link("atmo-auvergnerhonealpes.fr", destination: URL(string: "https://www.atmo-auvergnerhonealpes.fr")!)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.blue)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.gray.opacity(0.1))
+        )
+    }
+    
+    
     // MARK: - Helper Views
     private func detailCard(title: String, content: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -254,9 +279,9 @@ struct SO2DetailView: View {
     
     private func getQualityText(from indice: Int) -> String {
         switch indice {
-        case 1: return "Très bon"
-        case 2: return "Bon"
-        case 3: return "Moyen"
+        case 1: return "Bon"
+        case 2: return "Moyen"
+        case 3: return "Dégradé"
         case 4: return "Mauvais"
         case 5: return "Très mauvais"
         case 6: return "Extrêmement mauvais"

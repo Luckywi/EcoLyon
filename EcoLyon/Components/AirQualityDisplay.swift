@@ -53,7 +53,7 @@ struct Lyon {
 
 // MARK: - Service API optimisé
 class AirQualityAPIService {
-    private let apiToken = "0c7d0bee25f494150fa591275260e81f"
+    private let apiToken = Bundle.main.object(forInfoDictionaryKey: "ATMO_API_TOKEN") as? String ?? ""
     private let baseURL = "https://api.atmo-aura.fr/api/v1/communes"
     
     func fetchAirQuality(for codeInsee: String) async throws -> AirQualityData {
@@ -115,16 +115,17 @@ enum APIError: Error {
 
 // MARK: - ✅ COMPOSANT PRINCIPAL OPTIMISÉ
 struct AirQualityMapView: View {
-    @StateObject private var locationService = GlobalLocationService.shared
+    @ObservedObject private var locationService = GlobalLocationService.shared
     @State private var airData: AirQualityData?
     @State private var isLoadingAirData = false
     @State private var showLocationSelector = false
     @State private var errorMessage: String?
+    @State private var showAtmoReport = false // ✅ NOUVEAU : État pour la modale AtmoMapView
     
-    @State private var region = MKCoordinateRegion(
+    @State private var cameraPosition: MapCameraPosition = .region(MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 45.764043, longitude: 4.835659),
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
-    )
+    ))
     
     var body: some View {
         ZStack {
@@ -136,7 +137,7 @@ struct AirQualityMapView: View {
                 quickLoadingView
             }
         }
-        .frame(height: 480)
+        .frame(height: 410)
         .cornerRadius(20)
         .shadow(color: .black.opacity(0.3), radius: 15, x: 0, y: 8)
         .onAppear {
@@ -153,38 +154,56 @@ struct AirQualityMapView: View {
             // ✅ Arrêter les mises à jour quand la vue n'est plus visible
             locationService.stopLocationUpdates()
         }
-        .onChange(of: locationService.detectedDistrict) { district in
+        .onChange(of: locationService.detectedDistrict) { _, district in
             if let district = district {
                 loadAirQualityData(for: district)
                 updateMapRegion(for: district.coordinate)
             }
+        }
+        // ✅ NOUVEAU : Sheet pour AtmoMapView
+        .sheet(isPresented: $showAtmoReport) {
+            AtmoMapView()
         }
     }
     
     // Interface principale
     private func mainContentView(district: District) -> some View {
         ZStack {
-            Map(coordinateRegion: $region, showsUserLocation: true)
-                .cornerRadius(20)
+            Map(position: $cameraPosition) {
+                UserAnnotation()
+            }
+            .cornerRadius(20)
             
-            VStack(spacing: 12) {
+            VStack(spacing: 0) { // ✅ Changé de 12 à 0 pour contrôler précisément l'espacement
                 // Sélecteur d'arrondissement
-                DistrictSelectorView(
-                    selectedDistrict: Binding(
-                        get: { district },
-                        set: { newDistrict in
-                            locationService.setDistrict(newDistrict)
+                VStack(alignment: .leading, spacing: 0) {
+                    DistrictSelectorView(
+                        selectedDistrict: Binding(
+                            get: { district },
+                            set: { newDistrict in
+                                locationService.setDistrict(newDistrict)
+                            }
+                        ),
+                        showLocationSelector: $showLocationSelector,
+                        userLocation: locationService.userLocation.map {
+                            CLLocation(latitude: $0.latitude, longitude: $0.longitude)
                         }
-                    ),
-                    showLocationSelector: $showLocationSelector,
-                    userLocation: locationService.userLocation.map {
-                        CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+                    )
+                    
+                    // ✅ Espacement personnalisé entre le sélecteur et le bouton
+                    Spacer()
+                        .frame(height: 20) // Augmente cet espace si nécessaire
+                    
+                    // Bouton "Rapport détaillé" repositionné
+                    HStack {
+                        AtmoReportButton(showAtmoReport: $showAtmoReport)
+                        Spacer()
                     }
-                )
+                }
                 
                 Spacer()
                 
-                // Données de qualité d'air
+                // Données de qualité d'air (position inchangée)
                 AirQualityDataView(
                     airData: airData,
                     isLoading: isLoadingAirData,
@@ -199,7 +218,7 @@ struct AirQualityMapView: View {
             }
             .padding(16)
             
-            // Menu de sélection
+            // Menu de sélection (inchangé)
             if showLocationSelector {
                 LocationSelectorMenuView(
                     selectedDistrict: Binding(
@@ -221,9 +240,11 @@ struct AirQualityMapView: View {
     
     private var quickLoadingView: some View {
         ZStack {
-            Map(coordinateRegion: $region, showsUserLocation: true)
-                .cornerRadius(20)
-                .opacity(0.4)
+            Map(position: $cameraPosition) {
+                UserAnnotation()
+            }
+            .cornerRadius(20)
+            .opacity(0.4)
             
             VStack(spacing: 16) {
                 ProgressView()
@@ -278,11 +299,49 @@ struct AirQualityMapView: View {
     
     private func updateMapRegion(for coordinate: CLLocationCoordinate2D) {
         withAnimation(.easeInOut(duration: 0.5)) {
-            region = MKCoordinateRegion(
+            cameraPosition = .region(MKCoordinateRegion(
                 center: coordinate,
                 span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+            ))
+        }
+    }
+}
+
+// MARK: - ✅ NOUVEAU : Bouton "En savoir +"
+struct AtmoReportButton: View {
+    @Binding var showAtmoReport: Bool
+    
+    var body: some View {
+        Button(action: {
+            // ✅ AJOUT DE LA VIBRATION
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+            
+            showAtmoReport = true
+        }) {
+            HStack(spacing: 8) {
+                Image(systemName: "doc.text.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                
+                Text("Rapport détaillé")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 15)
+                    .fill(.black.opacity(0.7))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 15)
+                            .stroke(.white.opacity(0.3), lineWidth: 1)
+                    )
             )
         }
+        .buttonStyle(PlainButtonStyle())
+        .scaleEffect(showAtmoReport ? 0.95 : 1.0)
+        .animation(.easeInOut(duration: 0.1), value: showAtmoReport)
     }
 }
 
@@ -327,10 +386,10 @@ struct DistrictSelectorView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: 25)
+                RoundedRectangle(cornerRadius: 20)
                     .fill(.black.opacity(0.7))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 25)
+                        RoundedRectangle(cornerRadius: 20)
                             .stroke(.white.opacity(0.3), lineWidth: 1)
                     )
             )
@@ -345,11 +404,11 @@ struct AirQualityDataView: View {
     let errorMessage: String?
     let selectedDistrict: District
     let onRetry: () -> Void
-    
+
     var body: some View {
         Group {
             if isLoading {
-                LoadingView()
+                AirQualitySkeletonView()
             } else if let error = errorMessage {
                 EmptyStateView(message: error, onRetry: onRetry)
             } else if let data = airData {
@@ -453,6 +512,10 @@ struct CompactPollutantView: View {
     
     var body: some View {
         Button(action: {
+            // ✅ AJOUT DE LA VIBRATION (identique à AtmoMapView)
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+            
             showingDetail = true
         }) {
             Circle()
@@ -472,7 +535,7 @@ struct CompactPollutantView: View {
         }
     }
     
-    // ✅ ROUTER VERS LES VUES SPÉCIFIQUES
+    // ✅ ROUTER VERS LES VUES SPÉCIFIQUES (inchangé)
     @ViewBuilder
     private func getPollutantDetailView() -> some View {
         switch pollutant.polluant_nom.uppercased() {
@@ -492,12 +555,13 @@ struct CompactPollutantView: View {
         }
     }
     
+    // Fonctions utilitaires (inchangées)
     private func getShortName(_ name: String) -> String {
         switch name.uppercased() {
         case "NO2": return "NO2"
         case "O3": return "O3"
         case "PM10": return "PM10"
-        case "PM2.5": return "PM2.5"  // ✅ Gardé avec le point
+        case "PM2.5": return "PM2.5"
         case "SO2": return "SO2"
         default: return String(name.prefix(3))
         }
@@ -524,7 +588,7 @@ struct LocationSelectorMenuView: View {
     
     var body: some View {
         ZStack {
-            Color.black.opacity(0.3)
+            Color.white.opacity(0.5)
                 .ignoresSafeArea()
                 .onTapGesture {
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -601,7 +665,7 @@ struct LocationSelectorMenuView: View {
                 }
                 .background(
                     RoundedRectangle(cornerRadius: 16)
-                        .fill(.black.opacity(0.92))
+                        .fill(.black.opacity(0.8))
                         .overlay(
                             RoundedRectangle(cornerRadius: 16)
                                 .stroke(.white.opacity(0.3), lineWidth: 1)
@@ -615,60 +679,41 @@ struct LocationSelectorMenuView: View {
     }
 }
 
-// MARK: - Vues d'état
-struct LoadingView: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            ProgressView()
-                .scaleEffect(1.5)
-                .tint(.white)
-            
-            Text("Chargement...")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
-        }
-        .padding(30)
-        .background(
-            RoundedRectangle(cornerRadius: 20)
-                .fill(.black.opacity(0.8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(.white.opacity(0.3), lineWidth: 1)
-                )
-        )
-    }
-}
-
 struct EmptyStateView: View {
     let message: String
     let onRetry: () -> Void
-    
+
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 32))
-                .foregroundColor(.orange)
-            
+            Spacer()
+
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 28))
+                .foregroundColor(.white.opacity(0.5))
+
             Text(message)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.white)
-            
-            Button("Réessayer") {
-                onRetry()
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(.white.opacity(0.7))
+
+            Button(action: onRetry) {
+                Text("Réessayer")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(.white.opacity(0.15))
+                    )
             }
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundColor(.blue)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 15)
-                    .fill(.white.opacity(0.2))
-            )
+
+            Spacer()
         }
-        .padding(30)
+        .frame(maxWidth: .infinity)
+        .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 20)
-                .fill(.black.opacity(0.8))
+                .fill(.black.opacity(0.7))
                 .overlay(
                     RoundedRectangle(cornerRadius: 20)
                         .stroke(.white.opacity(0.3), lineWidth: 1)

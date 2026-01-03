@@ -5,23 +5,26 @@ struct PM25DetailView: View {
     let pollutant: Pollutant
     let selectedDistrict: District
     @Environment(\.dismiss) private var dismiss
-    
+
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 24) {
                     // En-tête avec localisation et statut
                     headerSection
-                    
+
                     // Curseur d'échelle avec données API
                     qualityScaleSection
-                    
+
                     // Concentration actuelle
                     concentrationSection
-                    
+
                     // Informations détaillées
                     detailSections
-                    
+
+                    // Mention des sources de données
+                    dataSourceSection
+
                     Spacer(minLength: 20)
                 }
                 .padding(.horizontal, 20)
@@ -39,29 +42,29 @@ struct PM25DetailView: View {
             }
         }
     }
-    
+
     // MARK: - Header Section
     private var headerSection: some View {
         VStack(spacing: 16) {
             Text("Polluant PM2.5")
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(.black)
-            
+
             VStack(spacing: 12) {
                 Text("Aujourd'hui à :")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.black.opacity(0.7))
-                
+
                 Text(selectedDistrict.name)
                     .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.black)
-                
+
                 // Pastille de statut
                 HStack(spacing: 8) {
                     Circle()
                         .fill(getQualityColor(from: pollutant.indice))
                         .frame(width: 12, height: 12)
-                    
+
                     Text(getQualityText(from: pollutant.indice))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.black)
@@ -74,14 +77,14 @@ struct PM25DetailView: View {
             )
         }
     }
-    
+
     // MARK: - Quality Scale Section
     private var qualityScaleSection: some View {
         VStack(spacing: 16) {
             Text("Indice de qualité PM2.5")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.black)
-            
+
             // Curseur horizontal identique à la vue principale
             VStack(spacing: 12) {
                 HStack(spacing: 2) {
@@ -92,28 +95,28 @@ struct PM25DetailView: View {
                             .animation(.easeInOut(duration: 0.3).delay(Double(level) * 0.1), value: pollutant.indice)
                     }
                 }
-                
+
                 // Labels des niveaux
                 HStack {
                     Text("1")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.gray)
-                    
+
                     Spacer()
-                    
+
                     Text("6")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.gray)
                 }
-                
+
                 // Niveau actuel
                 HStack {
                     Text("Niveau actuel: \(pollutant.indice)")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.black)
-                    
+
                     Spacer()
-                    
+
                     Text(getQualityText(from: pollutant.indice))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(getQualityColor(from: pollutant.indice))
@@ -126,27 +129,27 @@ struct PM25DetailView: View {
             )
         }
     }
-    
+
     // MARK: - Concentration Section
     private var concentrationSection: some View {
         VStack(spacing: 12) {
             Text("Concentration actuelle")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.black)
-            
+
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(String(format: "%.1f µg/m³", pollutant.concentration))
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(.black)
-                    
-                    Text("Particules PM2.5 mesurées")
+
+                    Text("Particules fines PM2.5 mesurées")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.gray)
                 }
-                
+
                 Spacer()
-                
+
                 // Indicateur visuel de niveau
                 Circle()
                     .fill(getQualityColor(from: pollutant.indice))
@@ -164,49 +167,69 @@ struct PM25DetailView: View {
             )
         }
     }
-    
+
     // MARK: - Detail Sections
     private var detailSections: some View {
         VStack(spacing: 20) {
             // Qu'est-ce que c'est ?
             detailCard(
                 title: "Qu'est-ce que c'est ?",
-                content: "Particules fines ou « poussières » de diamètre inférieur à 2,5 μm (microns)."
+                content: "Particules fines de diamètre inférieur à 2,5 µm. Elles sont si petites qu'elles pénètrent profondément dans les poumons et peuvent atteindre le sang."
             )
-            
+
             // Les pics
             detailCard(
                 title: "Les pics",
-                content: "Les pics de concentrations s'observent principalement en hiver, à proximité des axes routiers majeurs ou dans les bassins résidentiels utilisant largement des appareils ou méthodes de chauffage au bois non performant."
+                content: "Concentrations élevées en hiver, près des axes routiers et dans les zones utilisant le chauffage au bois."
             )
-            
+
             // Les effets sur la santé
             detailCard(
                 title: "Les effets sur la santé",
-                content: "Comme elles sont plus petites, les particules PM2.5 pénètrent plus profondément dans les voies respiratoires et atteignent les alvéoles pulmonaires. À ce titre, on leur attribue un plus grand impact sanitaire."
+                content: "Irritation des voies respiratoires, aggravation de l'asthme, risques cardiovasculaires. Les enfants, personnes âgées et malades chroniques sont plus vulnérables."
             )
-            
+
             // Les sources
             detailCard(
                 title: "Les sources principales",
                 content: """
-                • Trafic automobile (échappements, freinage, usure des pneus)
-                • Chauffage au bois domestique non performant
-                • Activités industrielles
-                • Agriculture (particules secondaires)
+                • Trafic automobile
+                • Chauffage au bois
+                • Industrie
+                • Agriculture
                 • Phénomènes naturels (érosion, pollens)
                 """
             )
         }
     }
-    
+
+    // MARK: - Data Source Section
+    private var dataSourceSection: some View {
+        VStack(spacing: 8) {
+            Text("Les données sur la qualité de l'air sont fournies par ATMO Auvergne-Rhône-Alpes, organisme agréé pour la surveillance de la qualité de l'air.")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundColor(.black.opacity(0.6))
+                .lineSpacing(2)
+                .multilineTextAlignment(.center)
+
+            Link("atmo-auvergnerhonealpes.fr", destination: URL(string: "https://www.atmo-auvergnerhonealpes.fr")!)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.blue)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.gray.opacity(0.1))
+        )
+    }
+
     // MARK: - Helper Views
     private func detailCard(title: String, content: String) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.black)
-            
+
             Text(content)
                 .font(.system(size: 16, weight: .regular))
                 .foregroundColor(.black.opacity(0.8))
@@ -219,7 +242,7 @@ struct PM25DetailView: View {
                 .fill(Color.gray.opacity(0.1))
         )
     }
-    
+
     // MARK: - Helper Functions
     private func getQualityColor(from indice: Int) -> Color {
         switch indice {
@@ -232,7 +255,7 @@ struct PM25DetailView: View {
         default: return Color.gray
         }
     }
-    
+
     private func getScaleColor(level: Int) -> Color {
         switch level {
         case 1: return Color(hex: "#50F0E6")
@@ -244,12 +267,12 @@ struct PM25DetailView: View {
         default: return Color.gray
         }
     }
-    
+
     private func getQualityText(from indice: Int) -> String {
         switch indice {
-        case 1: return "Très bon"
-        case 2: return "Bon"
-        case 3: return "Moyen"
+        case 1: return "Bon"
+        case 2: return "Moyen"
+        case 3: return "Dégradé"
         case 4: return "Mauvais"
         case 5: return "Très mauvais"
         case 6: return "Extrêmement mauvais"
@@ -265,7 +288,7 @@ struct PM25DetailView: View {
         pollutant: Pollutant(
             polluant_nom: "PM2.5",
             concentration: 15.3,
-            indice: 4
+            indice: 3
         ),
         selectedDistrict: District(
             id: "69386",

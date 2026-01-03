@@ -4,13 +4,29 @@ import Combine
 // MARK: - Main View Controller
 struct LyonFactsView: View {
     @StateObject private var viewModel = LyonFactsViewModel()
-    @StateObject private var preloader = LyonFactsPreloader.shared // ✅ AJOUT
+    @ObservedObject private var preloader = LyonFactsPreloader.shared // ✅ AJOUT
     @State private var currentDragOffset: CGFloat = 0
     @State private var showingShareSheet = false
-    @State private var shareItems: [Any] = []
+    // ✅ SUPPRIMÉ: @State private var shareItems: [Any] = []
     @Environment(\.dismiss) private var dismiss
     
     private let dragThreshold: CGFloat = 100
+    
+    // ✅ AJOUTÉ: Computed property pour les données de partage
+    private var shareItems: [Any] {
+        guard !viewModel.facts.isEmpty else { return ["Chargement..."] }
+        
+        let currentFact = viewModel.facts[viewModel.currentIndex]
+        let shareText = "J'ai appris ce fait intéressant sur la ville de Lyon grâce à l'application EcoLyon :\n\n\(currentFact.title)\n\n\(currentFact.description)"
+        
+        // L'image est forcément en cache si elle s'affiche
+        if let cachedImage = PhotoCache.shared.get(forKey: currentFact.imageUrl) {
+            return [shareText, cachedImage]
+        }
+        
+        // Fallback au cas où (ne devrait jamais arriver)
+        return [shareText]
+    }
     
     var body: some View {
         // Conteneur principal avec ZStack pour superposer les couches
@@ -58,32 +74,31 @@ struct LyonFactsView: View {
                 VStack(spacing: 0) {
                     // Zone des boutons en haut
                     HStack {
-                        // Bouton retour - Style simple comme la maquette
+                        // Bouton retour
                         Button(action: {
                             print("DISMISS PRESSED")
-                            // ✅ MODIFICATION: Déclencher le refresh du preloader
                             preloader.refreshFacts()
                             viewModel.currentIndex = 0
                             currentDragOffset = 0
                             dismiss()
                         }) {
-                            Image(systemName: "chevron.down")
+                            Image(systemName: "chevron.left")
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundColor(.white)
                                 .frame(width: 44, height: 44)
                                 .background(
-                                    Circle()
-                                        .fill(Color.black.opacity(0.6))
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(.black.opacity(0.7))
                                         .overlay(
-                                            Circle()
-                                                .fill(Color.black.opacity(0.3))
+                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                .stroke(.white.opacity(0.3), lineWidth: 1)
                                         )
                                 )
                         }
-                        
+
                         Spacer()
-                        
-                        // Bouton partage - Style simple comme la maquette
+
+                        // Bouton partage
                         Button(action: {
                             print("SHARE PRESSED")
                             shareCurrentFact()
@@ -93,11 +108,11 @@ struct LyonFactsView: View {
                                 .foregroundColor(.white)
                                 .frame(width: 44, height: 44)
                                 .background(
-                                    Circle()
-                                        .fill(Color.black.opacity(0.6))
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(.black.opacity(0.7))
                                         .overlay(
-                                            Circle()
-                                                .fill(Color.black.opacity(0.3))
+                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                .stroke(.white.opacity(0.3), lineWidth: 1)
                                         )
                                 )
                         }
@@ -175,49 +190,13 @@ struct LyonFactsView: View {
         index == viewModel.currentIndex ? 1.0 : 0.5
     }
     
+    // ✅ MODIFIÉ: Méthode ultra simplifiée
     private func shareCurrentFact() {
         guard !viewModel.facts.isEmpty else { return }
-        let currentFact = viewModel.facts[viewModel.currentIndex]
-        
-        // Créer le texte avec le préfixe personnalisé
-        let shareText = "J'ai appris ce fait intéressant sur la ville de Lyon grâce à l'application EcoLyon :\n\n\(currentFact.title)\n\n\(currentFact.description)"
-        
-        // Vérifier si l'image est déjà en cache
-        if let cachedImage = PhotoCache.shared.get(forKey: currentFact.imageUrl) {
-            // Image disponible immédiatement
-            shareItems = [shareText, cachedImage]
-            showingShareSheet = true
-        } else {
-            // Télécharger l'image avant de partager
-            downloadImageForSharing(url: currentFact.imageUrl, text: shareText)
-        }
+        showingShareSheet = true
     }
     
-    private func downloadImageForSharing(url: String, text: String) {
-        guard let imageUrl = URL(string: url) else {
-            // Si l'image n'est pas disponible, partager seulement le texte
-            shareItems = [text]
-            showingShareSheet = true
-            return
-        }
-        
-        URLSession.shared.dataTask(with: imageUrl) { data, response, error in
-            DispatchQueue.main.async {
-                if let data = data, let image = UIImage(data: data) {
-                    // Sauvegarder en cache pour la prochaine fois
-                    PhotoCache.shared.set(image, forKey: url)
-                    
-                    // Partager avec l'image
-                    shareItems = [text, image]
-                    showingShareSheet = true
-                } else {
-                    // En cas d'erreur, partager seulement le texte
-                    shareItems = [text]
-                    showingShareSheet = true
-                }
-            }
-        }.resume()
-    }
+    // ✅ SUPPRIMÉ: downloadImageForSharing - plus nécessaire
 }
 
 // MARK: - Share Sheet
